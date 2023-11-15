@@ -135,8 +135,12 @@ class TensorVM(TensorBase):
 
 
 class TensorVMSplit(TensorBase):
-    def __init__(self, args, aabb, gridSize, device, **kargs):
-        super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, **kargs)
+    
+    """def __init__(self, args, aabb, gridSize, device, **kargs):
+        super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, **kargs)"""
+    
+    def __init__(self, args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None):
+        super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None)
 
     def init_svd_volume(self, res, device):
         self.density_plane, self.density_line = self.init_one_svd(self.density_n_comp, self.gridSize, 0.1, device)
@@ -301,8 +305,8 @@ class TensorVMSplit(TensorBase):
 
 
 class TensorCP(TensorBase):
-    def __init__(self, args, aabb, gridSize, device, **kargs):
-        super(TensorCP, self).__init__(args, aabb, gridSize, device, **kargs)
+    def __init__(self, args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None):
+        super(TensorCP, self).__init__(args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None)
 
 
     def init_svd_volume(self, res, device):

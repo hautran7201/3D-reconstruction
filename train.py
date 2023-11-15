@@ -41,9 +41,10 @@ def export_mesh(args):
 
     ckpt = torch.load(args.ckpt, map_location=device)
     kwargs = ckpt['kwargs']
-    kwargs.update({'device': device})
+    # kwargs.update({'device': device})
     print(args.model_name)
-    tensorf = eval(args.model_name)(args=args, **kwargs)
+    # tensorf = eval(args.model_name)(args=args, **kwargs)
+    tensorf = eval(args.model_name)(**kwargs)
     tensorf.load(ckpt)
 
     alpha,_ = tensorf.getDenseAlpha()
@@ -137,11 +138,12 @@ def reconstruction(args):
         tensorf = eval(args.model_name)(**kwargs)
         tensorf.load(ckpt)
     else:
-        tensorf = eval(args.model_name)(args, aabb, reso_cur, device,
+        """tensorf = eval(args.model_name)(args, aabb, reso_cur, device,
                     density_n_comp=n_lamb_sigma, appearance_n_comp=n_lamb_sh, app_dim=args.data_dim_color, near_far=near_far,
                     shadingMode=args.shadingMode, alphaMask_thres=args.alpha_mask_thre, density_shift=args.density_shift, distance_scale=args.distance_scale,
                     pos_pe=args.pos_pe, view_pe=args.view_pe, fea_pe=args.fea_pe, featureC=args.featureC, step_ratio=args.step_ratio, 
-                    fea2denseAct=args.fea2denseAct, rayMarch_weight_thres=args.rayMarch_weight_thres) 
+                    fea2denseAct=args.fea2denseAct, rayMarch_weight_thres=args.rayMarch_weight_thres) """
+        tensorf = eval(args.model_name)(args, aabb, reso_cur, device, density_n_comp=n_lamb_sigma, appearance_n_comp=n_lamb_sh, near_far=near_far) 
 
     grad_vars = tensorf.get_optparam_groups(args.lr_init, args.lr_basis)
     if args.lr_decay_iters > 0:
@@ -193,7 +195,7 @@ def reconstruction(args):
         number_valib_rgb = (1, 1)
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         if args.free_reg:
-            rgb_map, depth_map, rgb, density, n_valib_rgb = renderer(
+            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb = renderer(
               rays_train, 
               tensorf, 
               iteration, 
@@ -206,7 +208,7 @@ def reconstruction(args):
               is_train=True
               )
         else:
-            rgb_map, depth_map, rgb, density, n_valib_rgb = renderer(
+            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb = renderer(
               rays_train, 
               tensorf, 
               -1, 
@@ -235,8 +237,8 @@ def reconstruction(args):
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
         if args.occ_reg:
             occ_reg_loss = nerf_math.lossfun_occ_reg(
-                rgb, 
-                density, 
+                all_rgb_voxel, 
+                sigma, 
                 reg_range=args.occ_reg_range,
                 wb_prior=args.occ_wb_prior, 
                 wb_range=args.occ_wb_range)

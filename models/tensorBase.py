@@ -277,30 +277,31 @@ class NeRF_v3_2(torch.nn.Module):
         return self.tail(indata)
 
 class TensorBase(torch.nn.Module):
-    def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 36,
+    """def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 36,
                     shadingMode = 'MLP_PE', alphaMask = None, near_far=[2.0,6.0],
                     density_shift = -10, alphaMask_thres=0.001, distance_scale=25, rayMarch_weight_thres=0.0001,
                     pos_pe = 6, view_pe = 6, fea_pe = 6, featureC=128, step_ratio=2.0,
-                    fea2denseAct = 'softplus'):
+                    fea2denseAct = 'softplus'):"""
+    def __init__(self, args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None):
         super(TensorBase, self).__init__()
 
         self.args = args
 
         self.density_n_comp = density_n_comp
         self.app_n_comp = appearance_n_comp
-        self.app_dim = app_dim
+        self.app_dim = args.data_dim_color
         self.aabb = aabb
         self.alphaMask = alphaMask
         self.device=device
 
-        self.density_shift = density_shift
-        self.alphaMask_thres = alphaMask_thres
-        self.distance_scale = distance_scale
-        self.rayMarch_weight_thres = rayMarch_weight_thres
-        self.fea2denseAct = fea2denseAct
+        self.density_shift = args.density_shift
+        self.alphaMask_thres = args.alpha_mask_thre
+        self.distance_scale = args.distance_scale
+        self.rayMarch_weight_thres = args.rayMarch_weight_thres
+        self.fea2denseAct = args.fea2denseAct
 
         self.near_far = near_far
-        self.step_ratio = step_ratio
+        self.step_ratio = args.step_ratio
 
 
         self.update_stepSize(gridSize)
@@ -310,8 +311,8 @@ class TensorBase(torch.nn.Module):
         self.comp_w = [1,1,1]
 
         self.init_svd_volume(gridSize[0], device)
-        self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = shadingMode, pos_pe, view_pe, fea_pe, featureC
-        self.init_render_func(shadingMode, pos_pe, view_pe, fea_pe, featureC, device)
+        self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = args.shadingMode, args.pos_pe, args.view_pe, args.fea_pe, args.featureC
+        self.init_render_func(args.shadingMode, args.pos_pe, args.view_pe, args.fea_pe, args.featureC, device)
 
     def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device):
         if shadingMode == 'MLP_PE':
@@ -371,6 +372,16 @@ class TensorBase(torch.nn.Module):
 
     def get_kwargs(self):
         return {
+            'args': self.args, 
+            'aabb': self.aabb, 
+            'gridSize':self.gridSize.tolist(),
+            'device': self.device, 
+            'density_n_comp': self.density_n_comp,
+            'appearance_n_comp': self.app_n_comp,
+            'near_far': self.near_far
+        }
+
+        """return {
             'aabb': self.aabb,
             'gridSize':self.gridSize.tolist(),
             'density_n_comp': self.density_n_comp,
@@ -391,7 +402,7 @@ class TensorBase(torch.nn.Module):
             'view_pe': self.view_pe,
             'fea_pe': self.fea_pe,
             'featureC': self.featureC
-        }
+        }"""
 
     def save(self, path):
         kwargs = self.get_kwargs()
@@ -605,7 +616,7 @@ class TensorBase(torch.nn.Module):
             ray_valid = ~ray_invalid
 
         sigma = torch.zeros(xyz_sampled.shape[:-1], device=xyz_sampled.device)
-        rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
+        all_rgb_voxel = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
 
         if ray_valid.any():
             xyz_sampled = self.normalize_coord(xyz_sampled)
@@ -621,11 +632,11 @@ class TensorBase(torch.nn.Module):
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
             valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_freq_reg_step)
-            rgb[app_mask] = valid_rgbs
+            all_rgb_voxel[app_mask] = valid_rgbs
             n_valib_rgb = (valid_rgbs.shape[0], app_mask.shape.numel())
 
         acc_map = torch.sum(weight, -1)
-        rgb_map = torch.sum(weight[..., None] * rgb, -2)
+        rgb_map = torch.sum(weight[..., None] * all_rgb_voxel, -2)
 
         if white_bg or (is_train and torch.rand((1,))<0.5):
             rgb_map = rgb_map + (1. - acc_map[..., None])
@@ -634,7 +645,7 @@ class TensorBase(torch.nn.Module):
 
         with torch.no_grad():
             depth_map = torch.sum(weight * z_vals, -1)
-            depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
+            disp_map  = depth_map + (1. - acc_map) * rays_chunk[..., -1]
         """print(sigma.shape, rgb_map.shape, rgb.shape)
         exit()"""
-        return rgb_map, depth_map, rgb, sigma, n_valib_rgb # alpha, weight, bg_weight
+        return rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb # alpha, weight, bg_weight
