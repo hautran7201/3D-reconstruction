@@ -1,0 +1,69 @@
+#------ Folder ------
+dataset_name = own_data
+datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0099_600_800_S10_train
+expname = 0099
+basedir = ./log
+
+
+#------ Config parameters ------
+n_iters = 50000
+batch_size = 4096
+featureC = 128
+
+
+#------ Resolution ------
+N_voxel_init = 2097156 # 128**3
+N_voxel_final = 27000000 # 300**3 16777216 27000000
+upsamp_list = [2000,3000,4000,5500,7000]
+update_AlphaMask_list = [2000,4000]
+reset_allray = []
+
+
+#------ Test ------
+N_vis = 5
+vis_every = 10000
+render_test = 1
+
+
+#------ Decomposition ------
+n_lamb_sigma = [16,16,16]
+n_lamb_sh = [48,48,48]
+
+
+#------ Model name ------
+model_name = TensorVMSplit
+shadingMode = MLP
+fea2denseAct = relu # softplus, relu 
+
+
+#------ Pow of feature encoding ------
+view_pe = 8
+pos_pe = 8
+fea_pe = 8
+
+
+#------ Tv reg ------
+TV_weight_density = 0.1
+TV_weight_app = 0.01
+
+
+#------ Frequence reg ------
+freq_reg_ratio = 0.9 
+
+
+#------ Occlusion reg ------
+occ_reg_loss_mult = 0.01
+occ_reg_range = 20
+occ_wb_range = 20
+occ_wb_prior = False
+
+
+#------ L1 reg ------
+L1_weight_inital = 1e-5
+L1_weight_rest = 1e-5
+
+
+#------ Mask ------
+rm_weight_mask_thre = 1e-4
+rayMarch_weight_thres = 0.0001
+alpha_mask_thre = 0.0001
