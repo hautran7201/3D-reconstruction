@@ -14,12 +14,12 @@ def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_freq_reg_step=None
     N_rays_all = rays.shape[0]
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-        rgb_map, depth_map, rgb, sigma, n_valib_rgb = tensorf(rays_chunk, step=step, total_freq_reg_step=total_freq_reg_step, 
+        rgb_map, depth_map, rgb, sigma, n_valib_rgb, acc_map, alpha, dists = tensorf(rays_chunk, step=step, total_freq_reg_step=total_freq_reg_step, 
         is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples) 
         rgbs.append(rgb_map)
         depth_maps.append(depth_map)
     
-    return torch.cat(rgbs), torch.cat(depth_maps), rgb, sigma, n_valib_rgb
+    return torch.cat(rgbs), torch.cat(depth_maps), rgb, sigma, n_valib_rgb, acc_map, alpha, dists
 
 def create_gif(path_to_dir, name_gif):
     filenames = os.listdir(path_to_dir)

@@ -12,9 +12,11 @@ import sys
 from models import nerf_math
 from opt import config_parser
 from pathlib import Path
-
+import torch
 import matplotlib.pyplot as plt
 import numpy as np
+from dataLoader import ray_utils
+from models import nerf_math
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 renderer = OctreeRender_trilinear_fast
@@ -93,6 +95,7 @@ def reconstruction(args):
     # init dataset
     dataset = dataset_dict[args.dataset_name]
     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False)
+    stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True)
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -166,7 +169,10 @@ def reconstruction(args):
 
     if not args.ndc_ray:
         allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs, bbox_only=True)
-    trainingSampler = SimpleSampler(allrays.shape[0], args.batch_size)
+
+    trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size)
+    if args.entropy and (args.N_entropy!=0):
+        entropySampler = SimpleSampler(allrays.shape[0], args.entropy_batch_size)
 
     print(f"\n  update AlphaMask list at {update_AlphaMask_list[:2]}")
 
@@ -186,21 +192,170 @@ def reconstruction(args):
     from collections import defaultdict
     history = defaultdict(list)
 
+    if args.entropy:
+        N_entropy = args.N_entropy
+        fun_entropy_loss = nerf_math.EntropyLoss(args, args.train_batch_size)
+
+    if args.smoothing:
+        get_near_c2w = ray_utils.GetNearC2W(args)
+        fun_KL_divergence_loss = nerf_math.SmoothingLoss(args)
+
+    use_batching = not args.no_batching
 
     for iteration in pbar:
+
+        if args.info_nerf:
+            if use_batching:
+                # Random over all images
+                train_ray_idx = trainingSampler.nextids()
+                batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
+                if args.entropy and (args.N_entropy!=0):
+                    entropy_ray_idx = entropySampler.nextids()
+                    batch_rays_entropy = allrays[entropy_ray_idx].to(device)
+                    
+            else:
+                # Random from one image
+                img_i = np.random.choice([0,1,2,3,4,5,6,7,8,9])
+                target = stack_train_dataset.all_rgbs[img_i]
+                    
+                rgb_pose = stack_train_dataset.poses[img_i][:3, :4]
+                W, H = stack_train_dataset.img_wh
+                focal = (stack_train_dataset.focal_x, stack_train_dataset.focal_y)
+                if args.train_batch_size is not None:
+                    directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                    rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(rgb_pose))
+                    rays_o = rays_o.reshape((H, W, 3))
+                    rays_d = rays_d.reshape((H, W, 3))
+
+                    if iteration < args.precrop_iters:
+                        dH = int(H//2 * args.precrop_frac)
+                        dW = int(W//2 * args.precrop_frac)
+                        coords = torch.stack(
+                            torch.meshgrid(
+                                torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH), 
+                                torch.linspace(W//2 - dW, W//2 + dW - 1, 2*dW)
+                            ), -1)
+                        """if i == start:
+                            print(f"[Config] Center cropping of size {2*dH} x {2*dW} is enabled until iter {args.precrop_iters}")                """
+                    else:
+                        coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
+
+                    coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
+                    select_inds = np.random.choice(coords.shape[0], size=[args.train_batch_size], replace=False)  # (N_rand,)
+                    select_coords = coords[select_inds].long()  # (N_rand, 2)
+                    rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                    rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                    batch_rays = torch.stack([rays_o, rays_d], 0) # (2, N_rand, 3)
+                    target_s = target[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+
+                    if args.smoothing:
+                        rgb_near_pose = get_near_c2w(rgb_pose, iter_=iteration)
+                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                        near_rays_o, near_rays_d = ray_utils.get_rays(directions, torch.Tensor(rgb_near_pose))
+                        near_rays_o = near_rays_o.reshape((H, W, 3))
+                        near_rays_d = near_rays_d.reshape((H, W, 3))
+                        near_rays_o = near_rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                        near_rays_d = near_rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                        near_batch_rays = torch.stack([near_rays_o, near_rays_d], 0) # (2, N_rand, 3)
+
+                ########################################################
+                #            Sampling for unseen rays                  #
+                ########################################################
+                
+                if args.entropy and (args.N_entropy !=0):
+                    img_i = np.random.choice(10)
+                    target = stack_train_dataset.all_rgbs[img_i]
+                    pose = stack_train_dataset.poses[img_i][:3, :4]
+                    if args.smooth_sampling_method == 'near_pixel':
+                        if args.smooth_pixel_range is None:
+                            raise Exception('The near pixel is not defined')
+                        # padding=args.smooth_pixel_range
+                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                        rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(pose))
+                        rays_o = rays_o.reshape((H, W, 3))
+                        rays_d = rays_d.reshape((H, W, 3))
+                    else:
+                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                        rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(pose))
+                        rays_o = rays_o.reshape((H, W, 3))
+                        rays_d = rays_d.reshape((H, W, 3))
+                    
+                    if iteration < args.precrop_iters:
+                        dH = int(H//2 * args.precrop_frac)
+                        dW = int(W//2 * args.precrop_frac)
+                        coords = torch.stack(
+                            torch.meshgrid(
+                                torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH), 
+                                torch.linspace(W//2 - dW, W//2 + dW - 1, 2*dW)
+                            ), -1)
+                        """if i == start:
+                            print(f"[Config] Center cropping of size {2*dH} x {2*dW} is enabled until iter {args.precrop_iters}")   """
+                    else:
+                        if args.smooth_sampling_method == 'near_pixel':
+                            padding = args.smooth_pixel_range
+                            coords = torch.stack(
+                                    torch.meshgrid(torch.linspace(padding, H-1+padding, H), 
+                                    torch.linspace(padding, W-1+padding, W)), -1)  # (H, W, 2)
+                        else:
+                            coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
+                    
+                    coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
+                    select_inds = np.random.choice(coords.shape[0], size=[args.N_entropy], replace=False)  # (N_rand,)
+                    select_coords = coords[select_inds].long()  # (N_rand, 2)
+                    rays_o_ent = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                    rays_d_ent = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                    batch_rays_entropy = torch.stack([rays_o_ent, rays_d_ent], 0) # (2, N_rand, 3)
+                    
+                    ########################################################
+                    #   Ray sampling for information gain reduction loss   #
+                    ########################################################
+
+                    if args.smoothing:
+                        if args.smooth_sampling_method == 'near_pixel':
+                            near_select_coords = ray_utils.get_near_pixel(select_coords, args.smooth_pixel_range)
+                            ent_near_rays_o = rays_o[near_select_coords[:, 0], near_select_coords[:, 1]]  # (N_rand, 3)
+                            ent_near_rays_d = rays_d[near_select_coords[:, 0], near_select_coords[:, 1]]  # (N_rand, 3)
+                            ent_near_batch_rays = torch.stack([ent_near_rays_o, ent_near_rays_d], 0) # (2, N_rand, 3)
+                        elif args.smooth_sampling_method == 'near_pose':
+                            ent_near_pose = get_near_c2w(pose,iter_=iteration)
+                            directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                            ent_near_rays_o, ent_near_rays_d = ray_utils.get_rays(directions, torch.Tensor(ent_near_pose))
+                            ent_near_rays_o = ent_near_rays_o.reshape((H, W, 3))
+                            ent_near_rays_d = ent_near_rays_d.reshape((H, W, 3))
+                            ent_near_rays_o = ent_near_rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                            ent_near_rays_d = ent_near_rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                            ent_near_batch_rays = torch.stack([ent_near_rays_o, ent_near_rays_d], 0) # (2, N_rand, 3)
+
+        N_rgb = batch_rays.shape[1]
+
+        if args.entropy and (args.N_entropy !=0):
+            batch_rays = torch.cat([batch_rays, batch_rays_entropy], 1)
+            
+        if args.smoothing:
+            if args.entropy and (args.N_entropy !=0):
+                batch_rays = torch.cat([batch_rays, near_batch_rays, ent_near_batch_rays], 1)
+            else: 
+                batch_rays = torch.cat([batch_rays, near_batch_rays], 1)
+
+        rays_o, rays_d = batch_rays 
+        batch_rays = torch.cat([rays_o, rays_d], 1) # [N_rand, 6]
+
+        print(batch_rays.device)
+        exit()
+
+        """train_ray_idx = trainingSampler.nextids()
+
+        # Random over all images
+        rays_train, rgb_train = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)"""
         
-        ray_idx = trainingSampler.nextids()
-        rays_train, rgb_train = allrays[ray_idx], allrgbs[ray_idx].to(device)
-        
-        number_valib_rgb = (1, 1)
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         if args.free_reg:
-            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb = renderer(
-              rays_train, 
+            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(
+              batch_rays, 
               tensorf, 
               iteration, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
-              chunk=args.batch_size,
+              chunk=args.train_batch_size,
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
@@ -208,33 +363,59 @@ def reconstruction(args):
               is_train=True
               )
         else:
-            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb = renderer(
-              rays_train, 
+            rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(
+              batch_rays, 
               tensorf, 
               -1, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
-              chunk=args.batch_size,
+              chunk=args.train_batch_size,
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
               device=device, 
               is_train=True
               )
+
         if n_valib_rgb != None:
           number_valib_rgb = n_valib_rgb
+
+        rgb_map = rgb_map[:args.train_batch_size]        
+        disp_map = disp_map[:args.train_batch_size]        
+        acc_map = acc_map[:args.train_batch_size]        
         
-        loss = torch.mean((rgb_map - rgb_train) ** 2)   
+        # loss = torch.mean((rgb_map - rgb_train) ** 2)   
+        loss = torch.mean((rgb_map - target_s) ** 2)   
 
         # loss
         total_loss = loss
+
+        if args.entropy:
+            entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha, acc_map)
+            history['entropy_ray_zvals'] = entropy_ray_zvals_loss
+        if args.entropy_end_iter is not None:
+            if iteration > args.entropy_end_iter:
+                entropy_ray_zvals_loss = 0
+        total_loss += args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss                
+
+        smoothing_lambda = args.smoothing_lambda * args.smoothing_rate ** (int(iteration/args.smoothing_step_size))
+        if args.smoothing:
+            smoothing_loss = fun_KL_divergence_loss(alpha)
+            history['KL_loss'] = smoothing_loss
+            if args.smoothing_end_iter is not None:
+                if iteration > args.smoothing_end_iter:
+                    smoothing_loss = 0        
+        total_loss += smoothing_lambda * smoothing_loss
+
         if args.ortho_reg:
             loss_reg = tensorf.vector_comp_diffs()
             total_loss += Ortho_reg_weight*loss_reg
             summary_writer.add_scalar('train/reg', loss_reg.detach().item(), global_step=iteration)
+
         if L1_reg_weight > 0:
             loss_reg_L1 = tensorf.density_L1()
             total_loss += L1_reg_weight*loss_reg_L1
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
+
         if args.occ_reg:
             occ_reg_loss = nerf_math.lossfun_occ_reg(
                 all_rgb_voxel, 
@@ -244,11 +425,13 @@ def reconstruction(args):
                 wb_range=args.occ_wb_range)
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
             total_loss += occ_reg_loss
+
         if args.tv_reg_density:
             TV_weight_density *= lr_factor
             loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
             total_loss = total_loss + loss_tv
             summary_writer.add_scalar('train/reg_tv_density', loss_tv.detach().item(), global_step=iteration)
+
         if args.tv_reg_app:
             TV_weight_app *= lr_factor
             loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app

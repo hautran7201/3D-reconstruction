@@ -648,4 +648,4 @@ class TensorBase(torch.nn.Module):
             disp_map  = depth_map + (1. - acc_map) * rays_chunk[..., -1]
         """print(sigma.shape, rgb_map.shape, rgb.shape)
         exit()"""
-        return rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb # alpha, weight, bg_weight
+        return rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists

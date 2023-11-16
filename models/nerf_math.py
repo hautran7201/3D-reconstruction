@@ -94,9 +94,9 @@ def lossfun_occ_reg(rgb, density, reg_range=10, wb_prior=False, wb_range=20):
 
 
 class EntropyLoss:
-    def __init__(self, args):
+    def __init__(self, args, N_samples):
         super(EntropyLoss, self).__init__()
-        self.N_samples = args.batch_size 
+        self.N_samples = N_samples
         self.type_ = args.entropy_type 
         self.threshold = args.entropy_acc_threshold
         self.computing_entropy_all = args.computing_entropy_all

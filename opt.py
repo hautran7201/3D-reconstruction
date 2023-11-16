@@ -22,17 +22,30 @@ def config_parser(cmd=None):
     parser.add_argument('--model_name', type=str, default='TensorVMSplit',
                         choices=['TensorVMSplit', 'TensorCP'])
 
-
     # loader options
-    parser.add_argument("--batch_size", type=int, default=4096)
+    parser.add_argument("--train_batch_size", type=int, default=4096)
+    parser.add_argument("--entropy_batch_size", type=int, default=4096)
     parser.add_argument("--n_iters", type=int, default=30000)
 
     parser.add_argument('--dataset_name', type=str, default='blender',
                         choices=['blender', 'llff', 'nsvf', 'dtu','tankstemple', 'own_data'])
 
+    # Infor nerf 
+    parser.add_argument("--info_nerf", action='store_true', 
+                        help='apply info nerf')
 
     # training options
-    # learning rate
+    # optimizing 
+    parser.add_argument("--smoothing_lambda", type=float, default=1, 
+                        help='lambda for smoothing loss')
+    parser.add_argument("--smoothing_activation", type=str, default='norm', 
+                        help='how to make alpha to the distribution')
+    parser.add_argument("--smoothing_step_size", type=int, default='5000',
+                        help='reducing smoothing every')
+    parser.add_argument("--smoothing_rate", type=float, default=1,
+                        help='reducing smoothing rate')
+    parser.add_argument("--smoothing_end_iter", type=int, default=None,
+                        help='when smoothing will be end')
     parser.add_argument("--lr_init", type=float, default=0.02,
                         help='learning rate')    
     parser.add_argument("--lr_basis", type=float, default=1e-3,
@@ -42,7 +55,12 @@ def config_parser(cmd=None):
     parser.add_argument("--lr_decay_target_ratio", type=float, default=0.1,
                         help='the target decay ratio; after decay_iters inital lr decays to lr*ratio')
     parser.add_argument("--lr_upsample_reset", type=int, default=1,
-                        help='reset lr to inital after upsampling')
+                        help='reset lr to inital after upsampling')    
+    parser.add_argument("--precrop_iters", type=int, default=0,
+                        help='number of steps to train on central crops')
+    parser.add_argument("--precrop_frac", type=float,
+                        default=.5, help='fraction of img taken for central crops')    
+                                                 
  
     # loss
     # L1
@@ -96,10 +114,26 @@ def config_parser(cmd=None):
                         help='number of entropy ray')
     parser.add_argument("--entropy_end_iter", type=int, default=None,
                         help='end iteratio of entropy')                        
+    parser.add_argument("--no_batching", action='store_true', 
+                        help='only take random rays from 1 image at a time')
 
-    # KL divergence
-    parser.add_argument("--smoothing_activation", type=str, default='norm', 
-                        help='how to make alpha to the distribution')                                                    
+    #lambda
+    parser.add_argument("--entropy_ray_lambda", type=float, default=1,
+                        help='entropy lambda for ray entropy loss')
+    parser.add_argument("--entropy_ray_zvals_lambda", type=float, default=1,
+                        help='entropy lambda for ray zvals entropy loss')                        
+
+    # choosing between rotating camera pose & near pixel
+    parser.add_argument("--smooth_sampling_method", type=str, default='near_pose', 
+        help='how to sample the near rays, near_pose: modifying camera pose, near_pixel: sample near pixel', 
+                    choices=['near_pose', 'near_pixel'])                        
+    # Sampling by rotating camera pose
+    parser.add_argument("--near_c2w_type", type=str, default='rot_from_origin', 
+                        help='random augmentation method')
+    parser.add_argument("--near_c2w_rot", type=float, default=5, 
+                        help='random augmentation rotate: degree')
+    parser.add_argument("--near_c2w_trans", type=float, default=0.1, 
+                        help='random augmentation translation')                        
 
     # Regularization
     parser.add_argument("--free_reg", action='store_true',
