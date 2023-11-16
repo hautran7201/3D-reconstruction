@@ -478,7 +478,7 @@ def reconstruction(args):
                 history[param_group['name']].append(float(round(param_group['lr'] * lr_factor, 5)))
 
             train_dir = f'{args.datadir}/training_render'         
-            train_visual = dataset(train_dir, split='train', downsample=args.downsample_train, is_stack=True)
+            train_visual = dataset(train_dir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False)
 
             save_rendered_image_per_train(
               test_dataset        = train_visual,
@@ -497,7 +497,7 @@ def reconstruction(args):
               )
 
         if iteration % args.vis_every == args.vis_every - 1 and args.N_vis!=0:
-            PSNRs_test = evaluation(
+            PSNR_test = evaluation(
               test_dataset, 
               tensorf, 
               args, 
@@ -512,7 +512,7 @@ def reconstruction(args):
               ndc_ray=ndc_ray, 
               compute_extra_metrics=False
               )
-
+            PSNRs_test.append(PSNR_test)
             summary_writer.add_scalar('test/psnr', np.mean(PSNRs_test), global_step=iteration)
             
         if iteration in update_AlphaMask_list:
@@ -568,7 +568,7 @@ def reconstruction(args):
         train_dataset = dataset('/content/drive/MyDrive/Dataset/THuman2.0/rendered_images/training_render', 
         split='train', downsample=args.downsample_train, is_stack=True)
 
-        PSNRs_test = evaluation(
+        PSNR_test = evaluation(
           train_dataset,
           tensorf, 
           args, 
@@ -582,12 +582,13 @@ def reconstruction(args):
           ndc_ray=ndc_ray,
           device=device
           )
+        PSNRs_test.append(PSNR_test)
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
 
 
     if args.render_test:
         os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
-        PSNRs_test = evaluation(
+        PSNR_test = evaluation(
           test_dataset,
           tensorf, 
           args, 
@@ -601,7 +602,7 @@ def reconstruction(args):
           ndc_ray=ndc_ray,
           device=device
           )
-
+        PSNRs_test.append(PSNR_test)
         summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
 

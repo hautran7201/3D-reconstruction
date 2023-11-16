@@ -6,10 +6,10 @@ basedir       = ./log
 
 
 #------ Config parameters ------
-n_iters     = 10000
+n_iters           = 30000
 train_batch_size  = 4096
-featureC    = 128 # for old mlp 
-step_ratio  = 0.7 # caculate number of sample per ray
+featureC          = 128 # for old mlp 
+step_ratio        = 0.7 # caculate number of sample per ray
 
 
 #------ Model name ------
@@ -28,7 +28,7 @@ data_dim_color  = 27
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 11
+netdepth            = 7
 body_arch           = resmlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
