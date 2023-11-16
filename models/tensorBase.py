@@ -234,7 +234,7 @@ class NeRF_v3_2(torch.nn.Module):
                            inact=inact,
                            outact=outact,
                            res_scale=1,
-                           dropout=round(drop_ratio+(1-drop_ratio)*(i/n_block), 1),
+                           dropout=round(drop_ratio*(i/n_block), 1),
                            n_learnable=2)
                     for i in range(n_block)
                 ]

@@ -28,7 +28,7 @@ data_dim_color  = 27
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 4
+netdepth            = 11
 body_arch           = resmlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
@@ -92,16 +92,16 @@ L1_weight_rest    = 1e-5
 
 
 #------ Info Nerf ------
-info_nerf = True
+info_nerf = False
 
 
 #------ Entropy loss ------
-entropy = True 
+entropy = False 
 no_batching = True
 
 
 #------ Smothing ------
-smoothing = True
+smoothing = False
 
 
 #------ Mask ------

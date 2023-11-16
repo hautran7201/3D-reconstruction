@@ -51,7 +51,7 @@ def evaluation(test_dataset,tensorf, args, renderer, step, total_freq_reg_step, 
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, depth_map, _, _, _ = renderer(rays, tensorf, step=step, total_freq_reg_step=total_freq_reg_step, chunk=4096, N_samples=N_samples,
+        rgb_map, depth_map, _, _, _, _, _, _ = renderer(rays, tensorf, step=step, total_freq_reg_step=total_freq_reg_step, chunk=4096, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
@@ -120,13 +120,13 @@ def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step,
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, depth_map, _, _, _ = renderer(rays, tensorf, step=-1, total_freq_reg_step=1, chunk=4096, N_samples=N_samples,
+        rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(rays, tensorf, step=-1, total_freq_reg_step=1, chunk=4096, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
-        rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
+        rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
 
-        depth_map, _ = visualize_depth_numpy(depth_map.numpy(),near_far)
+        depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
 
         rgb_map = (rgb_map.numpy() * 255).astype('uint8')
         # rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
@@ -183,7 +183,7 @@ def evaluation_path(test_dataset,tensorf, c2ws, renderer, step, total_freq_reg_s
             rays_o, rays_d = ndc_rays_blender(H, W, test_dataset.focal[0], 1.0, rays_o, rays_d)
         rays = torch.cat([rays_o, rays_d], 1)  # (h*w, 6)
 
-        rgb_map, depth_map, _, _, _ = renderer(rays, tensorf, step=step, total_freq_reg_step=total_freq_reg_step, chunk=8192, N_samples=N_samples,
+        rgb_map, depth_map, _, _, _, _, _, _ = renderer(rays, tensorf, step=step, total_freq_reg_step=total_freq_reg_step, chunk=8192, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
         rgb_map = rgb_map.clamp(0.0, 1.0)
 

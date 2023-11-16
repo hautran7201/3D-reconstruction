@@ -325,23 +325,24 @@ def reconstruction(args):
                             ent_near_rays_o = ent_near_rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
                             ent_near_rays_d = ent_near_rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
                             ent_near_batch_rays = torch.stack([ent_near_rays_o, ent_near_rays_d], 0) # (2, N_rand, 3)
+        else:
+            train_ray_idx = trainingSampler.nextids()
+            batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
 
         N_rgb = batch_rays.shape[1]
 
         if args.entropy and (args.N_entropy !=0):
             batch_rays = torch.cat([batch_rays, batch_rays_entropy], 1)
+            rays_o, rays_d = batch_rays 
+            batch_rays = torch.cat([rays_o, rays_d], 1) # [N_rand, 6]
             
         if args.smoothing:
             if args.entropy and (args.N_entropy !=0):
                 batch_rays = torch.cat([batch_rays, near_batch_rays, ent_near_batch_rays], 1)
             else: 
                 batch_rays = torch.cat([batch_rays, near_batch_rays], 1)
-
-        rays_o, rays_d = batch_rays 
-        batch_rays = torch.cat([rays_o, rays_d], 1) # [N_rand, 6]
-
-        print(batch_rays.device)
-        exit()
+            rays_o, rays_d = batch_rays 
+            batch_rays = torch.cat([rays_o, rays_d], 1) # [N_rand, 6]
 
         """train_ray_idx = trainingSampler.nextids()
 
@@ -384,27 +385,28 @@ def reconstruction(args):
         acc_map = acc_map[:args.train_batch_size]        
         
         # loss = torch.mean((rgb_map - rgb_train) ** 2)   
-        loss = torch.mean((rgb_map - target_s) ** 2)   
+        loss = torch.mean((rgb_map - target_s.to(device)) ** 2)   
 
         # loss
         total_loss = loss
 
-        if args.entropy:
+        if args.entropy and args.info_nerf:
             entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha, acc_map)
             history['entropy_ray_zvals'] = entropy_ray_zvals_loss
-        if args.entropy_end_iter is not None:
-            if iteration > args.entropy_end_iter:
-                entropy_ray_zvals_loss = 0
-        total_loss += args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss                
+            if args.entropy_end_iter is not None:
+                if iteration > args.entropy_end_iter:
+                    entropy_ray_zvals_loss = 0
+
+            total_loss += args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss                
 
         smoothing_lambda = args.smoothing_lambda * args.smoothing_rate ** (int(iteration/args.smoothing_step_size))
-        if args.smoothing:
+        if args.smoothing and args.info_nerf:
             smoothing_loss = fun_KL_divergence_loss(alpha)
             history['KL_loss'] = smoothing_loss
             if args.smoothing_end_iter is not None:
                 if iteration > args.smoothing_end_iter:
                     smoothing_loss = 0        
-        total_loss += smoothing_lambda * smoothing_loss
+            total_loss += smoothing_lambda * smoothing_loss
 
         if args.ortho_reg:
             loss_reg = tensorf.vector_comp_diffs()
@@ -529,7 +531,7 @@ def reconstruction(args):
             # if not args.ndc_ray and iteration in update_AlphaMask_list[:2]:
                 # filter rays outside the bbox
                 allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
-                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)
+                trainingSampler = SimpleSampler(allrgbs.shape[0], args.train_batch_size)
 
 
         if iteration in upsamp_list:
