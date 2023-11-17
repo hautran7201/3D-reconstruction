@@ -6,7 +6,7 @@ basedir       = ./log
 
 
 #------ Config parameters ------
-n_iters           = 15000
+n_iters           = 10000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
 step_ratio        = 0.7 # caculate number of sample per ray
@@ -28,7 +28,7 @@ data_dim_color  = 27
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 5
+netdepth            = 3
 body_arch           = mlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
@@ -48,7 +48,7 @@ downsample_train        = 1
 
 #------ Test ------
 N_vis             = 5
-vis_every         = 2000
+vis_every         = 1000
 train_vis_every   = 1000
 
 
@@ -99,16 +99,21 @@ L1_weight_rest    = 1e-5
 
 
 #------ Info Nerf ------
-info_nerf = True
+info_nerf       = True
+no_batching     = True
 
 
 #------ Entropy loss ------
-entropy       = True 
-no_batching   = True
+entropy                   = True 
+N_entropy                 = 512
+entropy_ray_zvals_lambda  = 1
+entropy_ray_lambda        = 1
 
 
 #------ Smothing ------
-smoothing = True
+smoothing         = True
+smoothing_lambda  = 1
+smoothing_rate    = 1
 
 
 #------ Mask ------

@@ -95,9 +95,11 @@ def reconstruction(args):
     print('========================= LOAD DATASET =========================')    
     print('Dataset name:', args.dataset_name)
     dataset = dataset_dict[args.dataset_name]
+
     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False)
     stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False)
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True)
+    
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
     ndc_ray = args.ndc_ray
@@ -172,9 +174,13 @@ def reconstruction(args):
     if not args.ndc_ray:
         allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs, bbox_only=True)
 
-    trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size)
+    if args.info_nerf:
+        trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size-args.N_entropy)
+    else:
+        trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size)
+
     if args.entropy and (args.N_entropy!=0):
-        entropySampler = SimpleSampler(allrays.shape[0], args.entropy_batch_size)
+        entropySampler = SimpleSampler(allrays.shape[0], args.N_entropy)
 
     print('========================= INITIAL PARAMETERS =========================')    
     print(f"\nUpdate AlphaMask list at {update_AlphaMask_list[:2]}")
@@ -205,19 +211,18 @@ def reconstruction(args):
 
     use_batching = not args.no_batching
 
-    for iteration in pbar:
-
-        # start = timeit.default_timer()
+    for iteration in pbar:        
 
         if args.info_nerf:
             if use_batching:
                 # Random over all images
+                N_rand = args.train_batch_size - args.N_entropy
                 train_ray_idx = trainingSampler.nextids()
                 batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
-                if args.entropy and (args.N_entropy!=0) and args.info_nerf:
+                if args.entropy and (args.N_entropy!=0):
                     entropy_ray_idx = entropySampler.nextids()
                     batch_rays_entropy = allrays[entropy_ray_idx].to(device)
-                    
+                
             else:
                 N_rand = int((args.train_batch_size-2*args.N_entropy)/2)
 
@@ -241,14 +246,14 @@ def reconstruction(args):
                             torch.meshgrid(
                                 torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH), 
                                 torch.linspace(W//2 - dW, W//2 + dW - 1, 2*dW)
-                            ), -1)
-                        """if i == start:
-                            print(f"[Config] Center cropping of size {2*dH} x {2*dW} is enabled until iter {args.precrop_iters}")                """
+                            ), -1).to(device)
+                        
                     else:
-                        coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
+                        coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1).to(device)  # (H, W, 2)
 
                     coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
-                    select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
+                    # select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
+                    select_inds = torch.randint(low=0, high=coords.shape[0], size=[N_rand], dtype=torch.int64).to(device)
                     select_coords = coords[select_inds].long()  # (N_rand, 2)
                     rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
                     rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -258,7 +263,7 @@ def reconstruction(args):
                     if args.smoothing:
                         rgb_near_pose = get_near_c2w(rgb_pose, iter_=iteration)
                         directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
-                        near_rays_o, near_rays_d = ray_utils.get_rays(directions, torch.Tensor(rgb_near_pose))
+                        near_rays_o, near_rays_d = ray_utils.get_rays(directions, rgb_near_pose)
                         near_rays_o = near_rays_o.reshape((H, W, 3))
                         near_rays_d = near_rays_d.reshape((H, W, 3))
                         near_rays_o = near_rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -294,20 +299,19 @@ def reconstruction(args):
                             torch.meshgrid(
                                 torch.linspace(H//2 - dH, H//2 + dH - 1, 2*dH), 
                                 torch.linspace(W//2 - dW, W//2 + dW - 1, 2*dW)
-                            ), -1)
-                        """if i == start:
-                            print(f"[Config] Center cropping of size {2*dH} x {2*dW} is enabled until iter {args.precrop_iters}")   """
+                            ), -1).to(device)
                     else:
                         if args.smooth_sampling_method == 'near_pixel':
                             padding = args.smooth_pixel_range
                             coords = torch.stack(
                                     torch.meshgrid(torch.linspace(padding, H-1+padding, H), 
-                                    torch.linspace(padding, W-1+padding, W)), -1)  # (H, W, 2)
+                                    torch.linspace(padding, W-1+padding, W)), -1).to(device)  # (H, W, 2)
                         else:
-                            coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
+                            coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1).to(device)  # (H, W, 2)
                     
                     coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
-                    select_inds = np.random.choice(coords.shape[0], size=[args.N_entropy], replace=False)  # (N_rand,)
+                    # select_inds = np.random.choice(coords.shape[0], size=[args.N_entropy], replace=False)  # (N_rand,)
+                    select_inds = torch.randint(low=0, high=coords.shape[0], size=[args.N_entropy], dtype=torch.int64).to(device)
                     select_coords = coords[select_inds].long()  # (N_rand, 2)
                     rays_o_ent = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
                     rays_d_ent = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -326,7 +330,7 @@ def reconstruction(args):
                         elif args.smooth_sampling_method == 'near_pose':
                             ent_near_pose = get_near_c2w(pose,iter_=iteration)
                             directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
-                            ent_near_rays_o, ent_near_rays_d = ray_utils.get_rays(directions, torch.Tensor(ent_near_pose))
+                            ent_near_rays_o, ent_near_rays_d = ray_utils.get_rays(directions, ent_near_pose)
                             ent_near_rays_o = ent_near_rays_o.reshape((H, W, 3))
                             ent_near_rays_d = ent_near_rays_d.reshape((H, W, 3))
                             ent_near_rays_o = ent_near_rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -334,15 +338,17 @@ def reconstruction(args):
                             ent_near_batch_rays = torch.cat([ent_near_rays_o, ent_near_rays_d], 1) # (2, N_rand, 3)
 
         else:
+            N_rand = args.train_batch_size
             train_ray_idx = trainingSampler.nextids()
             batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
 
         N_rgb = batch_rays.shape[1]
 
+        
         if args.entropy and (args.N_entropy !=0) and args.info_nerf:
             batch_rays = torch.cat([batch_rays, batch_rays_entropy], 0)
             
-        if args.smoothing and args.info_nerf:
+        if args.smoothing and args.info_nerf and args.no_batching:
             if args.entropy and (args.N_entropy !=0):
                 # print(batch_rays.shape, near_batch_rays.shape, ent_near_batch_rays.shape)
                 batch_rays = torch.cat([batch_rays, near_batch_rays, ent_near_batch_rays], 0)
@@ -380,10 +386,15 @@ def reconstruction(args):
         if n_valib_rgb != None:
           number_valib_rgb = n_valib_rgb
 
-        rgb_map = rgb_map[:args.train_batch_size]        
-        disp_map = disp_map[:args.train_batch_size]        
-        acc_map = acc_map[:args.train_batch_size]        
-        
+        if args.info_nerf:
+            acc_raw = acc_map 
+            alpha_raw = alpha
+            dists_raw = dists
+
+        rgb_map = rgb_map[:N_rand]        
+        disp_map = disp_map[:N_rand]        
+        acc_map = acc_map[:N_rand]    
+
         # loss = torch.mean((rgb_map - rgb_train) ** 2)   
         loss = torch.mean((rgb_map - target_s.to(device)) ** 2)   
 
@@ -392,8 +403,7 @@ def reconstruction(args):
         loss = round(loss.detach().item(), 4)        
 
         if args.entropy and args.info_nerf:
-            entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha, acc_map)
-            history['entropy_ray_zvals'] = entropy_ray_zvals_loss
+            entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha_raw, acc_raw)
             if args.entropy_end_iter is not None:
                 if iteration > args.entropy_end_iter:
                     entropy_ray_zvals_loss = 0
@@ -403,7 +413,6 @@ def reconstruction(args):
         smoothing_lambda = args.smoothing_lambda * args.smoothing_rate ** (int(iteration/args.smoothing_step_size))
         if args.smoothing and args.info_nerf:
             smoothing_loss = fun_KL_divergence_loss(alpha)
-            history['KL_loss'] = smoothing_loss
             if args.smoothing_end_iter is not None:
                 if iteration > args.smoothing_end_iter:
                     smoothing_loss = 0        
@@ -477,6 +486,8 @@ def reconstruction(args):
             history['test_psnr'].append(round(float(PSNRs_test[-1]), 2))
             history['mse'].append(round(loss, 5))
             history['pc_valib_rgb'].append(round(number_valib_rgb[0]/number_valib_rgb[1], 2))        
+            # history['entropy_ray_zvals'].append(round(entropy_ray_zvals_loss.detach().item(), 5))
+            # history['KL_loss'].append(round(smoothing_loss.detach().item(), 5))
 
             for param_group in tensorf.get_optparam_groups():
                 history[param_group['name']].append(float(round(param_group['lr'] * lr_factor, 5)))
@@ -524,7 +535,7 @@ def reconstruction(args):
             if reso_cur[0] * reso_cur[1] * reso_cur[2]<256**3:# update volume resolution
                 reso_mask = reso_cur
             new_aabb = tensorf.updateAlphaMask(tuple(reso_mask))
-            
+            update_AlphaMask_list
             if iteration == update_AlphaMask_list[0]:
             # if iteration in update_AlphaMask_list[:2]:
                 tensorf.shrink(new_aabb)
@@ -533,9 +544,15 @@ def reconstruction(args):
 
             if not args.ndc_ray and iteration in update_AlphaMask_list[1:]:
             # if not args.ndc_ray and iteration in update_AlphaMask_list[:2]:
-                # filter rays outside the bbox
+                # filter rays outside the bbox                
                 allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
-                trainingSampler = SimpleSampler(allrgbs.shape[0], args.train_batch_size)
+                if args.info_nerf:
+                    trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size-args.N_entropy)
+                else:
+                    trainingSampler = SimpleSampler(allrays.shape[0], args.train_batch_size)
+                
+                if args.entropy and (args.N_entropy!=0):
+                    entropySampler = SimpleSampler(allrays.shape[0], args.N_entropy)
 
 
         if iteration in upsamp_list:
@@ -586,8 +603,7 @@ def reconstruction(args):
           ndc_ray=ndc_ray,
           device=device
           )
-        PSNRs_test.append(PSNR_test)
-        print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
+        print(f'======> {args.expname} test all psnr: {np.mean(PSNR_test)} <========================')
 
 
     if args.render_test:
@@ -606,9 +622,8 @@ def reconstruction(args):
           ndc_ray=ndc_ray,
           device=device
           )
-        PSNRs_test.append(PSNR_test)
         summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
-        print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
+        print(f'======> {args.expname} test all psnr: {np.mean(PSNR_test)} <========================')
 
 
     if args.render_path:
