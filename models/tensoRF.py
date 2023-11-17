@@ -125,20 +125,20 @@ class TensorVM(TensorBase):
     def upsample_volume_grid(self, res_target):
         # self.app_plane, self.app_line = self.up_sampling_VM(self.app_plane, self.app_line, res_target)
         # self.density_plane, self.density_line = self.up_sampling_VM(self.density_plane, self.density_line, res_target)
-
+ 
         scale = res_target[0]/self.line_coef.shape[2] #assuming xyz have the same scale
         plane_coef = F.interpolate(self.plane_coef.detach().data, scale_factor=scale, mode='bilinear',align_corners=True)
         line_coef  = F.interpolate(self.line_coef.detach().data, size=(res_target[0],1), mode='bilinear',align_corners=True)
         self.plane_coef, self.line_coef = torch.nn.Parameter(plane_coef), torch.nn.Parameter(line_coef)
         self.compute_stepSize(res_target)
         print(f'upsamping to {res_target}')
-
+ 
 
 class TensorVMSplit(TensorBase):
     
     """def __init__(self, args, aabb, gridSize, device, **kargs):
         super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, **kargs)"""
-    
+     
     def __init__(self, args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None):
         super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, density_n_comp, appearance_n_comp, near_far, alphaMask=None)
 

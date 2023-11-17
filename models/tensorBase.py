@@ -312,6 +312,19 @@ class TensorBase(torch.nn.Module):
         self.init_svd_volume(gridSize[0], device)
         self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = args.shadingMode, args.pos_pe, args.view_pe, args.fea_pe, args.featureC
         self.init_render_func(args.shadingMode, args.pos_pe, args.view_pe, args.fea_pe, args.featureC, device)
+        print('========================= PARAMETERS =========================')   
+        print('pos_pe:', self.pos_pe)
+        print('view_pe:', self.view_pe)
+        print('fea_pe:', self.fea_pe)
+        print('featureC:', self.featureC)
+        print('density_n_comp:', density_n_comp) 
+        print('appearance_n_comp:', density_n_comp)
+        print('matMode:', self.matMode)
+        print('vecMode:', self.vecMode)
+        print('alphaMask_thres:', self.alphaMask_thres)
+        print('rayMarch_weight_thres:', self.rayMarch_weight_thres)
+        print('device:', device)
+        print('\n\n')
 
     def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device):
         if shadingMode == 'MLP_PE':
@@ -332,14 +345,11 @@ class TensorBase(torch.nn.Module):
         else:
             print("Unrecognized shading module")  
 
-        print(" ", "pos_pe", pos_pe, "view_pe", view_pe, "fea_pe", fea_pe)
-        print()
+        print('========================= MODULE =========================')   
         print(self.renderModule)      
-        print() 
+        print('\n\n')
   
     def update_stepSize(self, gridSize):
-        print("\n  aabb", self.aabb.view(-1))
-        print("  grid size", gridSize)
         self.aabbSize = self.aabb[1] - self.aabb[0]
         self.invaabbSize = 2.0/self.aabbSize
         self.gridSize= torch.LongTensor(gridSize).to(self.device)
@@ -347,9 +357,6 @@ class TensorBase(torch.nn.Module):
         self.stepSize=torch.mean(self.units)*self.step_ratio
         self.aabbDiag = torch.sqrt(torch.sum(torch.square(self.aabbSize)))
         self.nSamples=int((self.aabbDiag / self.stepSize).item()) + 1
-        print("  sampling step size: ", self.stepSize)
-        print("  sampling number: ", self.nSamples)
-        print()
 
     def init_svd_volume(self, res, device):
         pass
@@ -358,7 +365,6 @@ class TensorBase(torch.nn.Module):
         pass
     
     def compute_densityfeature(self, xyz_sampled):
-        print('compute_densityfeature')
         pass
     
     def compute_appfeature(self, xyz_sampled):
@@ -550,7 +556,7 @@ class TensorBase(torch.nn.Module):
                 t_min = torch.minimum(rate_a, rate_b).amax(-1)#.clamp(min=near, max=far)
                 t_max = torch.maximum(rate_a, rate_b).amin(-1)#.clamp(min=near, max=far)
                 mask_inbbox = t_max > t_min
-
+ 
             else:
                 xyz_sampled, _,_ = self.sample_ray(rays_o, rays_d, N_samples=N_samples, is_train=False)
                 mask_inbbox= (self.alphaMask.sample_alpha(xyz_sampled).view(xyz_sampled.shape[:-1]) > 0).any(-1)

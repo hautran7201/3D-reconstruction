@@ -138,7 +138,7 @@ def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step,
 
             loss = logs["mse"]
             train_psnr = logs["train_psnr"]
-
+            
             # Plot the rgb, depth and the loss plot.
             fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(15, 20))
             ax[0][0].imshow(rgb_map)
@@ -154,9 +154,8 @@ def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step,
             ax[1][1].plot(train_psnr)
             ax[1][1].set_title(f"Train psnr Plot: {current_step:03d}")
             ax[1][1].set_box_aspect(800/600)
-
-            fig.savefig(f"{savePath}/plot/{step_size}/{current_step:03d}.png")
-            plt.show()
+            
+            savefig = fig.savefig(f"{savePath}/plot/{step_size}/{current_step:03d}.png")
             plt.close()   
 
 @torch.no_grad()

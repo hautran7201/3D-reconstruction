@@ -6,8 +6,8 @@ basedir       = ./log
 
 
 #------ Config parameters ------
-n_iters           = 30000
-train_batch_size  = 4096
+n_iters           = 15000
+train_batch_size  = 2048
 featureC          = 128 # for old mlp 
 step_ratio        = 0.7 # caculate number of sample per ray
 
@@ -53,9 +53,11 @@ train_vis_every   = 1000
 
 
 #------ Render ------
+render_only   = False
 render_test   = True
 render_train  = False
 render_path   = False
+export_mesh   = True
 
 
 #------ Decomposition ------
