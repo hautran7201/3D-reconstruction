@@ -7,7 +7,7 @@ basedir       = ./log
 
 #------ Config parameters ------
 n_iters           = 15000
-train_batch_size  = 2048
+train_batch_size  = 4096
 featureC          = 128 # for old mlp 
 step_ratio        = 0.7 # caculate number of sample per ray
 

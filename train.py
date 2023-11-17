@@ -17,11 +17,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from dataLoader import ray_utils
 from models import nerf_math
+import timeit
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 renderer = OctreeRender_trilinear_fast
-
- 
 
 class SimpleSampler:
     def __init__(self, total, batch):
@@ -208,16 +207,20 @@ def reconstruction(args):
 
     for iteration in pbar:
 
+        # start = timeit.default_timer()
+
         if args.info_nerf:
             if use_batching:
                 # Random over all images
                 train_ray_idx = trainingSampler.nextids()
                 batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
-                if args.entropy and (args.N_entropy!=0):
+                if args.entropy and (args.N_entropy!=0) and args.info_nerf:
                     entropy_ray_idx = entropySampler.nextids()
                     batch_rays_entropy = allrays[entropy_ray_idx].to(device)
                     
             else:
+                N_rand = int((args.train_batch_size-2*args.N_entropy)/2)
+
                 # Random from one image
                 img_i = np.random.choice([0,1,2,3,4,5,6,7,8,9])
                 target = stack_train_dataset.all_rgbs[img_i].to(device)
@@ -245,7 +248,7 @@ def reconstruction(args):
                         coords = torch.stack(torch.meshgrid(torch.linspace(0, H-1, H), torch.linspace(0, W-1, W)), -1)  # (H, W, 2)
 
                     coords = torch.reshape(coords, [-1,2])  # (H * W, 2)
-                    select_inds = np.random.choice(coords.shape[0], size=[args.train_batch_size], replace=False)  # (N_rand,)
+                    select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
                     select_coords = coords[select_inds].long()  # (N_rand, 2)
                     rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
                     rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
@@ -341,9 +344,11 @@ def reconstruction(args):
             
         if args.smoothing and args.info_nerf:
             if args.entropy and (args.N_entropy !=0):
+                # print(batch_rays.shape, near_batch_rays.shape, ent_near_batch_rays.shape)
                 batch_rays = torch.cat([batch_rays, near_batch_rays, ent_near_batch_rays], 0)
             else: 
                 batch_rays = torch.cat([batch_rays, near_batch_rays], 0)
+
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         if args.free_reg:
             rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(
@@ -352,7 +357,6 @@ def reconstruction(args):
               iteration, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
               chunk=args.train_batch_size,
-              # chunk=batch_rays.shape[0],
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
@@ -366,7 +370,6 @@ def reconstruction(args):
               -1, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
               chunk=args.train_batch_size,
-              # chunk=batch_rays.shape[0],
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
@@ -437,6 +440,11 @@ def reconstruction(args):
             loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
             total_loss = total_loss + loss_tv
             summary_writer.add_scalar('train/reg_tv_app', loss_tv.detach().item(), global_step=iteration)
+
+        """stop = timeit.default_timer()
+
+        print('Time: ', stop - start) 
+        exit()"""
 
         optimizer.zero_grad()
         total_loss.backward()
