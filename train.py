@@ -220,14 +220,14 @@ def reconstruction(args):
             else:
                 # Random from one image
                 img_i = np.random.choice([0,1,2,3,4,5,6,7,8,9])
-                target = stack_train_dataset.all_rgbs[img_i]
+                target = stack_train_dataset.all_rgbs[img_i].to(device)
                     
-                rgb_pose = stack_train_dataset.poses[img_i][:3, :4]
+                rgb_pose = stack_train_dataset.poses[img_i][:3, :4].to(device)
                 W, H = stack_train_dataset.img_wh
                 focal = (stack_train_dataset.focal_x, stack_train_dataset.focal_y)
                 if args.train_batch_size is not None:
-                    directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
-                    rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(rgb_pose))
+                    directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
+                    rays_o, rays_d = ray_utils.get_rays(directions, rgb_pose)
                     rays_o = rays_o.reshape((H, W, 3))
                     rays_d = rays_d.reshape((H, W, 3))
 
@@ -254,7 +254,7 @@ def reconstruction(args):
 
                     if args.smoothing:
                         rgb_near_pose = get_near_c2w(rgb_pose, iter_=iteration)
-                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                        directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
                         near_rays_o, near_rays_d = ray_utils.get_rays(directions, torch.Tensor(rgb_near_pose))
                         near_rays_o = near_rays_o.reshape((H, W, 3))
                         near_rays_d = near_rays_d.reshape((H, W, 3))
@@ -265,22 +265,22 @@ def reconstruction(args):
                 ########################################################
                 #            Sampling for unseen rays                  #
                 ########################################################
-                
                 if args.entropy and (args.N_entropy !=0):
                     img_i = np.random.choice(10)
                     target = stack_train_dataset.all_rgbs[img_i]
-                    pose = stack_train_dataset.poses[img_i][:3, :4]
+                    pose = stack_train_dataset.poses[img_i][:3, :4].to(device)
+                    
                     if args.smooth_sampling_method == 'near_pixel':
                         if args.smooth_pixel_range is None:
                             raise Exception('The near pixel is not defined')
                         # padding=args.smooth_pixel_range
-                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
-                        rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(pose))
+                        directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
+                        rays_o, rays_d = ray_utils.get_rays(directions, pose)
                         rays_o = rays_o.reshape((H, W, 3))
                         rays_d = rays_d.reshape((H, W, 3))
                     else:
-                        directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
-                        rays_o, rays_d = ray_utils.get_rays(directions, torch.Tensor(pose))
+                        directions = ray_utils.get_ray_directions(H, W, focal).to(device) # (H, W, 3), (H, W, 3)
+                        rays_o, rays_d = ray_utils.get_rays(directions, pose)
                         rays_o = rays_o.reshape((H, W, 3))
                         rays_d = rays_d.reshape((H, W, 3))
                     
@@ -322,7 +322,7 @@ def reconstruction(args):
                             ent_near_batch_rays = torch.cat([ent_near_rays_o, ent_near_rays_d], 1) # (2, N_rand, 3)
                         elif args.smooth_sampling_method == 'near_pose':
                             ent_near_pose = get_near_c2w(pose,iter_=iteration)
-                            directions = ray_utils.get_ray_directions(H, W, focal)  # (H, W, 3), (H, W, 3)
+                            directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
                             ent_near_rays_o, ent_near_rays_d = ray_utils.get_rays(directions, torch.Tensor(ent_near_pose))
                             ent_near_rays_o = ent_near_rays_o.reshape((H, W, 3))
                             ent_near_rays_d = ent_near_rays_d.reshape((H, W, 3))
@@ -336,21 +336,14 @@ def reconstruction(args):
 
         N_rgb = batch_rays.shape[1]
 
-        if args.entropy and (args.N_entropy !=0):
+        if args.entropy and (args.N_entropy !=0) and args.info_nerf:
             batch_rays = torch.cat([batch_rays, batch_rays_entropy], 0)
             
-        if args.smoothing:
+        if args.smoothing and args.info_nerf:
             if args.entropy and (args.N_entropy !=0):
                 batch_rays = torch.cat([batch_rays, near_batch_rays, ent_near_batch_rays], 0)
             else: 
                 batch_rays = torch.cat([batch_rays, near_batch_rays], 0)
-            """rays_o, rays_d = batch_rays 
-            batch_rays = torch.cat([rays_o, rays_d], 1) # [N_rand, 6]"""
-        """train_ray_idx = trainingSampler.nextids()
-
-        # Random over all images
-        rays_train, rgb_train = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)"""
-        
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         if args.free_reg:
             rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(
@@ -359,6 +352,7 @@ def reconstruction(args):
               iteration, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
               chunk=args.train_batch_size,
+              # chunk=batch_rays.shape[0],
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
@@ -372,6 +366,7 @@ def reconstruction(args):
               -1, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
               chunk=args.train_batch_size,
+              # chunk=batch_rays.shape[0],
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 

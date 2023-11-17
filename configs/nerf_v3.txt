@@ -29,13 +29,13 @@ data_dim_color  = 27
 #------ Resmlp_v3 config ------
 netwidth            = 128 
 netdepth            = 5
-body_arch           = resmlp # mlp, resmlp
+body_arch           = mlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
 trial               = True
 layerwise_netwidths = ''
-dropout_ratio       = 0.5
+dropout_ratio       = 0.0
 
 
 #------ Resolution ------
@@ -48,7 +48,7 @@ downsample_train        = 1
 
 #------ Test ------
 N_vis             = 5
-vis_every         = 1000
+vis_every         = 2000
 train_vis_every   = 1000
 
 

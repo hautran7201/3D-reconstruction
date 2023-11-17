@@ -321,7 +321,7 @@ class GetNearC2W:
     def rot_from_origin(self, c2w,iter_=None):
         rot = c2w[:3,:3]
         pos = c2w[:3,-1:]
-        rot_mat = self.get_rotation_matrix(iter_)
+        rot_mat = self.get_rotation_matrix(iter_).to(c2w.device)
         pos = torch.mm(rot_mat, pos)
         rot = torch.mm(rot_mat, rot)
         c2w = torch.cat((rot, pos), -1)

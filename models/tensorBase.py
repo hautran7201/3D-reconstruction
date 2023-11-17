@@ -323,6 +323,8 @@ class TensorBase(torch.nn.Module):
         print('vecMode:', self.vecMode)
         print('alphaMask_thres:', self.alphaMask_thres)
         print('rayMarch_weight_thres:', self.rayMarch_weight_thres)
+        print('info_nerf:', args.info_nerf)
+        print('free_reg:', args.free_reg)
         print('device:', device)
         print('\n\n')
 
@@ -632,8 +634,6 @@ class TensorBase(torch.nn.Module):
 
         alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
         app_mask = weight > self.rayMarch_weight_thres
-
-        n_valib_rgb = None 
         
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
