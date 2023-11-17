@@ -186,7 +186,7 @@ class NeRF_v3_2(torch.nn.Module):
 
     def __init__(self, inChanel, pospe=6, viewpe=6, feape=6, 
                 netwidth=256, netdepth=22, resmlp_act='relu', body_arch='mlp', 
-                linear_tail=False, use_residual=False, trial=False, layerwise_netwidths=''):
+                linear_tail=False, use_residual=False, trial=False, drop_ratio=0, layerwise_netwidths=''):
         super(NeRF_v3_2, self).__init__()
         self.npospe = 3+2*pospe*3
         self.nview = 3+2*viewpe*3
@@ -228,7 +228,6 @@ class NeRF_v3_2(torch.nn.Module):
                     D - 2
                 ) // 2  # 2 layers in a ResMLP, deprecated since there can be >2 layers in a block, use --trial.n_block
 
-                drop_ratio = 0.5
                 body = [
                     ResMLP(W,
                            inact=inact,
@@ -302,7 +301,7 @@ class TensorBase(torch.nn.Module):
 
         self.near_far = near_far
         self.step_ratio = args.step_ratio
-
+        self.dropout_ratio = args.dropout_ratio
 
         self.update_stepSize(gridSize)
 
@@ -328,6 +327,7 @@ class TensorBase(torch.nn.Module):
                                           linear_tail = self.args.linear_tail, 
                                           use_residual = self.args.use_residual, 
                                           trial = self.args.trial, 
+                                          drop_ratio = self.dropout_ratio,
                                           layerwise_netwidths = self.args.layerwise_netwidths).to(device)
         else:
             print("Unrecognized shading module")  

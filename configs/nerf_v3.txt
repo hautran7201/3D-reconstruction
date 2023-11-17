@@ -28,14 +28,14 @@ data_dim_color  = 27
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 7
+netdepth            = 5
 body_arch           = resmlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
 trial               = True
 layerwise_netwidths = ''
-dropout             = 1
+dropout_ratio       = 0.5
 
 
 #------ Resolution ------
@@ -48,9 +48,14 @@ downsample_train        = 1
 
 #------ Test ------
 N_vis             = 5
-render_test       = 1
-vis_every         = 10000
+vis_every         = 1000
 train_vis_every   = 1000
+
+
+#------ Render ------
+render_test   = True
+render_train  = False
+render_path   = False
 
 
 #------ Decomposition ------
@@ -92,16 +97,16 @@ L1_weight_rest    = 1e-5
 
 
 #------ Info Nerf ------
-info_nerf = False
+info_nerf = True
 
 
 #------ Entropy loss ------
-entropy = False 
-no_batching = True
+entropy       = True 
+no_batching   = True
 
 
 #------ Smothing ------
-smoothing = False
+smoothing = True
 
 
 #------ Mask ------

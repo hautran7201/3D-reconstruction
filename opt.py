@@ -175,7 +175,7 @@ def config_parser(cmd=None):
     parser.add_argument("--trial", action="store_true",
                         help='use residual')      
     parser.add_argument('--layerwise_netwidths', type=str, default='')                                                                                                       
-    parser.add_argument('--dropout', type=float, default=1)
+    parser.add_argument('--dropout_ratio', type=float, default=0)
 
     # alpha_mask 
     parser.add_argument("--rayMarch_weight_thres", type=float, default=0.0001,
@@ -196,11 +196,11 @@ def config_parser(cmd=None):
     parser.add_argument("--ckpt", type=str, default=None,
                         help='specific weights npy file to reload for coarse network')
                         
-    parser.add_argument("--render_only", type=int, default=0)
-    parser.add_argument("--render_test", type=int, default=0)
-    parser.add_argument("--render_train", type=int, default=0)
-    parser.add_argument("--render_path", type=int, default=0)
-    parser.add_argument("--export_mesh", type=int, default=0)
+    parser.add_argument("--render_only", default=False, action="store_true")
+    parser.add_argument("--render_test", default=False, action="store_true")
+    parser.add_argument("--render_train", default=False, action="store_true")
+    parser.add_argument("--render_path", default=False, action="store_true")
+    parser.add_argument("--export_mesh", default=False, action="store_true")
 
     # rendering options
     parser.add_argument('--lindisp', default=False, action="store_true",
