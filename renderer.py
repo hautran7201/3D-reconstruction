@@ -97,7 +97,7 @@ def evaluation(test_dataset,tensorf, args, renderer, step, total_freq_reg_step, 
     return PSNRs
 
 @torch.no_grad()
-def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step, total_train_step, logs, step_size, savePath=None, N_vis=5, prtx='', N_samples=-1,
+def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, current_step, total_train_step, logs, step_size, savePath=None, N_vis=5, prtx='', N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -115,9 +115,38 @@ def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step,
     img_eval_interval = 1 if N_vis < 0 else max(test_dataset.all_rays.shape[0] // N_vis,1)
     idxs = list(range(0, test_dataset.all_rays.shape[0], img_eval_interval))
     # for idx, samples in tqdm(enumerate(test_dataset.all_rays[0::img_eval_interval]), file=sys.stdout):
+
+    test_alpha = None
+    test_rgb_map = None
+    test_depth_map = None
     for idx, samples in enumerate(test_dataset.all_rays[0::img_eval_interval]):
 
         W, H = test_dataset.img_wh
+        rays = samples.view(-1,samples.shape[-1])
+
+        rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(rays, tensorf, step=-1, total_freq_reg_step=1, chunk=4096, N_samples=N_samples,
+                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+
+        rgb_map = rgb_map.clamp(0.0, 1.0)
+
+        rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
+
+        test_depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
+
+        test_rgb_map = (rgb_map.numpy() * 255).astype('uint8')
+
+    
+
+    near_far = train_dataset.near_far
+    img_eval_interval = 1 if N_vis < 0 else max(train_dataset.all_rays.shape[0] // N_vis,1)
+    idxs = list(range(0, train_dataset.all_rays.shape[0], img_eval_interval))
+
+    train_alpha = None
+    train_rgb_map = None
+    train_depth_map = None
+    for idx, samples in enumerate(train_dataset.all_rays[0::img_eval_interval]):
+
+        W, H = train_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
         rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists = renderer(rays, tensorf, step=-1, total_freq_reg_step=1, chunk=4096, N_samples=N_samples,
@@ -126,37 +155,45 @@ def save_rendered_image_per_train(test_dataset, tensorf, renderer, current_step,
 
         rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
 
-        depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
+        train_depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
 
-        rgb_map = (rgb_map.numpy() * 255).astype('uint8')
-        # rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
-        rgb_maps.append(rgb_map)
-        depth_maps.append(depth_map)
-        if savePath is not None:
-            imageio.imwrite(f'{savePath}/rgb/{prtx}{idx:03d}.png', rgb_map)
-            imageio.imwrite(f'{savePath}/rgbd/{prtx}{idx:03d}.png', depth_map)
+        train_rgb_map = (rgb_map.numpy() * 255).astype('uint8')
 
-            loss = logs["mse"]
-            train_psnr = logs["train_psnr"]
-            
-            # Plot the rgb, depth and the loss plot.
-            fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(15, 20))
-            ax[0][0].imshow(rgb_map)
-            ax[0][0].set_title(f"Predicted Image: {current_step:03d}")
 
-            ax[0][1].imshow(depth_map)
-            ax[0][1].set_title(f"Image with Depth Map: {current_step:03d}")
+    if savePath is not None:
+        loss = logs["mse"]
+        train_psnr = logs["train_psnr"]
+        test_psnr = logs["test_psnr"]
+        
+        # Plot the rgb, depth and the loss plot.
+        fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(15, 20))
+        ax[0][0].imshow(test_rgb_map)
+        ax[0][0].set_title(f"Predicted test Image: {current_step:03d}")
 
-            ax[1][0].plot(loss)
-            ax[1][0].set_title(f"Loss Plot: {current_step:03d}")
-            ax[1][0].set_box_aspect(800/600)
+        ax[0][1].imshow(test_depth_map)
+        ax[0][1].set_title(f"Test image with Depth Map: {current_step:03d}")
 
-            ax[1][1].plot(train_psnr)
-            ax[1][1].set_title(f"Train psnr Plot: {current_step:03d}")
-            ax[1][1].set_box_aspect(800/600)
-            
-            savefig = fig.savefig(f"{savePath}/plot/{step_size}/{current_step:03d}.png")
-            plt.close()   
+        ax[1][0].imshow(train_rgb_map)
+        ax[1][0].set_title(f"Predicted train Image: {current_step:03d}")
+
+        ax[1][1].imshow(train_depth_map)
+        ax[1][1].set_title(f"Train image with Depth Map: {current_step:03d}")
+
+        W, H = test_dataset.img_wh
+        ax[2][0].plot(loss)
+        ax[2][0].set_title(f"Loss Plot: {current_step:03d}")
+        ax[2][0].set_box_aspect(H/W)
+
+        ax[2][1].plot(train_psnr)
+        ax[2][1].set_title(f"Train psnr Plot: {current_step:03d}")
+        ax[2][1].set_box_aspect(H/W)
+
+        ax[2][2].plot(test_psnr)
+        ax[2][2].set_title(f"Test psnr Plot: {current_step:03d}")
+        ax[2][2].set_box_aspect(H/W)
+        
+        savefig = fig.savefig(f"{savePath}/plot/{step_size}/{current_step:03d}.png")
+        plt.close()   
 
 @torch.no_grad()
 def evaluation_path(test_dataset,tensorf, c2ws, renderer, step, total_freq_reg_step, savePath=None, N_vis=5, prtx='', N_samples=-1,

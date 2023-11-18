@@ -131,16 +131,22 @@ class EntropyLoss:
             return torch.log(entropy_ray_loss + 1e-10)
         return entropy_ray_loss
 
-    def ray_zvals(self, sigma, acc):
+    def ray_zvals(self, sigma, acc, N_samples):
         if self.smoothing and self.computing_ignore_smoothing:
             N_smooth = sigma.size(0)//2
             acc = acc[:N_smooth]
             sigma = sigma[:N_smooth]
         if not self.computing_entropy_all:
-            acc = acc[self.N_samples:]
-            sigma = sigma[self.N_samples:]
+            acc = acc[N_samples:]
+            sigma = sigma[N_samples:]
+
+        """print(self.smoothing and self.computing_ignore_smoothing)
+        print(not self.computing_entropy_all)
+        print(sigma)
+        print(acc)"""
         ray_prob = sigma / (torch.sum(sigma,-1).unsqueeze(-1)+1e-10)
         entropy_ray = self.entropy(ray_prob)
+        """print(entropy_ray)"""
         entropy_ray_loss = torch.sum(entropy_ray, -1)
         
         # masking no hitting poisition?

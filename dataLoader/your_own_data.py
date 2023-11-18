@@ -12,7 +12,7 @@ import numpy as np
 from .ray_utils import *
 
 class YourOwnDataset(Dataset):
-    def __init__(self, datadir=-1, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True):
+    def __init__(self, datadir=-1, split='train', downsample=1.0, is_stack=False, N_imgs=0, N_vis=-1, tqdm=True):
 
         self.N_vis = N_vis
         self.root_dir = datadir
@@ -21,6 +21,8 @@ class YourOwnDataset(Dataset):
         self.downsample = downsample
         self.tqdm = tqdm
         self.define_transforms()
+
+        self.N_imgs = N_imgs
 
         # self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
         self.scene_bbox = torch.tensor([[-1., -1., -1.], [1., 1., 1.]])
@@ -68,7 +70,12 @@ class YourOwnDataset(Dataset):
 
         img_eval_interval = 1 if self.N_vis < 0 else len(self.meta['frames']) // self.N_vis
         idxs = list(range(0, len(self.meta['frames']), img_eval_interval))
- 
+
+        if self.N_imgs > 0 and self.N_imgs < len(idxs):
+            idxs = np.random.choice(len(idxs), size=[self.N_imgs], replace=False)
+          
+        self.N_imgs = len(idxs)
+
         if self.tqdm:
             for i in tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})'):#img_list:#
 

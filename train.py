@@ -96,9 +96,12 @@ def reconstruction(args):
     print('Dataset name:', args.dataset_name)
     dataset = dataset_dict[args.dataset_name]
 
-    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False)
-    stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False)
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True)
+    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_imgs)
+    stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_imgs, tqdm=False)
+    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_imgs)
+
+    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, N_imgs=1, tqdm=False)
+    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=1, tqdm=False)
     
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -224,7 +227,10 @@ def reconstruction(args):
                     batch_rays_entropy = allrays[entropy_ray_idx].to(device)
                 
             else:
-                N_rand = int((args.train_batch_size-2*args.N_entropy)/2)
+                if args.entropy and args.smoothing:
+                    N_rand = int((args.train_batch_size-2*args.N_entropy)/2)
+                else:
+                    N_rand = args.train_batch_size-args.N_entropy
 
                 # Random from one image
                 img_i = np.random.choice([0,1,2,3,4,5,6,7,8,9])
@@ -344,7 +350,6 @@ def reconstruction(args):
 
         N_rgb = batch_rays.shape[1]
 
-        
         if args.entropy and (args.N_entropy !=0) and args.info_nerf:
             batch_rays = torch.cat([batch_rays, batch_rays_entropy], 0)
             
@@ -401,33 +406,44 @@ def reconstruction(args):
         # loss  
         total_loss = loss
         loss = round(loss.detach().item(), 4)        
+        entropy_ray_zvals_loss = 0
+        smoothing_loss = 0
 
         if args.entropy and args.info_nerf:
-            entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha_raw, acc_raw)
-            if args.entropy_end_iter is not None:
-                if iteration > args.entropy_end_iter:
-                    entropy_ray_zvals_loss = 0
+            entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha_raw, acc_raw, tensorf.nSamples)
+            if torch.isnan(entropy_ray_zvals_loss):
+                exit()
+            # exit()
 
-            total_loss += args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss                
+        if args.entropy_end_iter is not None:
+            if iteration > args.entropy_end_iter:
+                entropy_ray_zvals_loss = 0
+        total_loss += args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss                
+        # print(entropy_ray_zvals_loss)
 
         smoothing_lambda = args.smoothing_lambda * args.smoothing_rate ** (int(iteration/args.smoothing_step_size))
         if args.smoothing and args.info_nerf:
             smoothing_loss = fun_KL_divergence_loss(alpha)
             if args.smoothing_end_iter is not None:
                 if iteration > args.smoothing_end_iter:
-                    smoothing_loss = 0        
-            total_loss += smoothing_lambda * smoothing_loss
+                    smoothing_loss = 0   
+        total_loss += smoothing_lambda * smoothing_loss
 
+        loss_reg = 0
         if args.ortho_reg:
             loss_reg = tensorf.vector_comp_diffs()
-            total_loss += Ortho_reg_weight*loss_reg
+            loss_reg += Ortho_reg_weight*loss_reg
             summary_writer.add_scalar('train/reg', loss_reg.detach().item(), global_step=iteration)
+        total_loss += loss_reg
 
+        loss_reg_L1 = 0
         if L1_reg_weight > 0:
             loss_reg_L1 = tensorf.density_L1()
-            total_loss += L1_reg_weight*loss_reg_L1
+            loss_reg_L1 += L1_reg_weight*loss_reg_L1
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
+        total_loss += loss_reg_L1
 
+        occ_reg_loss = 0
         if args.occ_reg:
             occ_reg_loss = nerf_math.lossfun_occ_reg(
                 all_rgb_voxel, 
@@ -436,24 +452,21 @@ def reconstruction(args):
                 wb_prior=args.occ_wb_prior, 
                 wb_range=args.occ_wb_range)
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
-            total_loss += occ_reg_loss
+        total_loss += occ_reg_loss
 
+        den_loss_tv = 0
         if args.tv_reg_density:
             TV_weight_density *= lr_factor
-            loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
-            total_loss = total_loss + loss_tv
-            summary_writer.add_scalar('train/reg_tv_density', loss_tv.detach().item(), global_step=iteration)
+            den_loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
+            summary_writer.add_scalar('train/reg_tv_density', den_loss_tv.detach().item(), global_step=iteration)
+        total_loss += den_loss_tv
 
+        app_loss_tv = 0
         if args.tv_reg_app:
             TV_weight_app *= lr_factor
-            loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
-            total_loss = total_loss + loss_tv
-            summary_writer.add_scalar('train/reg_tv_app', loss_tv.detach().item(), global_step=iteration)
-
-        """stop = timeit.default_timer()
-
-        print('Time: ', stop - start) 
-        exit()"""
+            app_loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
+            summary_writer.add_scalar('train/reg_tv_app', den_loss_tv.detach().item(), global_step=iteration)
+        total_loss += app_loss_tv
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -476,7 +489,14 @@ def reconstruction(args):
                 f'Iteration {iteration:05d}:'
                 + f' train_psnr = {float(PSNRs[-1]):.2f}'
                 + f' test_psnr = {float(PSNRs_test[-1]):.2f}'
+                + f' total = {total_loss:.6f}'
                 + f' mse = {loss:.6f}'
+                + f' entropy_ray_zvals_loss = {entropy_ray_zvals_loss:.6f}'
+                + f' loss_reg = {loss_reg:.6f}'
+                + f' loss_reg_L1 = {loss_reg_L1:.6f}'
+                + f' occ_reg_loss = {occ_reg_loss:.6f}'
+                + f' den_loss_tv = {den_loss_tv:.6f}'
+                + f' app_loss_tv = {app_loss_tv:.6f}'
                 + f' valib_rgb = {number_valib_rgb[0]}/{number_valib_rgb[1]}({round((number_valib_rgb[0]*100)/number_valib_rgb[1], 2)}%)'
             )
 
@@ -491,11 +511,10 @@ def reconstruction(args):
 
             for param_group in tensorf.get_optparam_groups():
                 history[param_group['name']].append(float(round(param_group['lr'] * lr_factor, 5)))
-
-            train_dir = f'{args.datadir}/training_render'         
-            train_visual = dataset(train_dir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False)
+       
 
             save_rendered_image_per_train(
+              train_dataset       = test_visual,
               test_dataset        = train_visual,
               tensorf             = tensorf, 
               renderer            = renderer,

@@ -1,15 +1,16 @@
 #------ Folder ------
 dataset_name  = own_data
-datadir       = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0525_608_800_S10_train_enhance
+datadir       = /content/drive/MyDrive/AI_dataset/Thuman2.0/rendered_images/0525_608_800_S10_train_enhance
 expname       = 0525
 basedir       = ./log
+N_imgs        = 5
 
 
 #------ Config parameters ------
-n_iters           = 10000
+n_iters           = 15000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
-step_ratio        = 0.7 # caculate number of sample per ray
+step_ratio        = 1 # caculate number of sample per ray
 
 
 #------ Model name ------
@@ -27,15 +28,15 @@ data_dim_color  = 27
 
 
 #------ Resmlp_v3 config ------
-netwidth            = 128 
-netdepth            = 3
-body_arch           = mlp # mlp, resmlp
+netwidth            = 256 
+netdepth            = 11
+body_arch           = resmlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
 trial               = True
 layerwise_netwidths = ''
-dropout_ratio       = 0.0
+dropout_ratio       = 0.5
 
 
 #------ Resolution ------
@@ -69,9 +70,9 @@ n_lamb_sh       = [48,48,48]
 
 #------ Tv reg ------
 tv_reg_density      = True
-TV_weight_density   = 0.01
+TV_weight_density   = 0.1
 tv_reg_app          = True
-TV_weight_app       = 0.01
+TV_weight_app       = 0.1
 
 
 #------ Frequence reg ------
@@ -81,11 +82,11 @@ freq_reg_ratio  = 0.9
 
 #------ Ortho reg ------
 ortho_reg     = True
-Ortho_weight  = 0.0
+Ortho_weight  = 0.1
 
 
 #------ Occlusion reg ------
-occ_reg             = True
+occ_reg             = False
 occ_reg_loss_mult   = 0.01 
 occ_reg_range       = 20
 occ_wb_range        = 20
@@ -100,18 +101,18 @@ L1_weight_rest    = 1e-5
 
 #------ Info Nerf ------
 info_nerf       = True
-no_batching     = True
+no_batching     = False
 
 
 #------ Entropy loss ------
 entropy                   = True 
-N_entropy                 = 512
-entropy_ray_zvals_lambda  = 1
-entropy_ray_lambda        = 1
+N_entropy                 = 1024
+entropy_ray_zvals_lambda  = 0.002
+entropy_acc_threshold     = 0.01
 
 
 #------ Smothing ------
-smoothing         = True
+smoothing         = False
 smoothing_lambda  = 1
 smoothing_rate    = 1
 
