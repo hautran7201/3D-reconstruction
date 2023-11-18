@@ -74,7 +74,7 @@ class MLPRender_Fea(torch.nn.Module):
     def __init__(self,inChanel, viewpe=6, feape=6, featureC=128):
         super(MLPRender_Fea, self).__init__()
 
-        self.in_mlpC = 3 + 2*viewpe*3 + inChanel + 2*feape*inChanel + 3 + inChanel
+        self.in_mlpC = 2*viewpe*3 + 2*feape*inChanel + 3 + inChanel
         self.viewpe = viewpe
         self.feape = feape
         layer1 = torch.nn.Linear(self.in_mlpC, featureC)
@@ -316,27 +316,21 @@ class TensorBase(torch.nn.Module):
         print('pos_pe:', self.pos_pe)
         print('view_pe:', self.view_pe)
         print('fea_pe:', self.fea_pe)
-        print('--------------------')
-        print('n_iters', args.n_iters)
-        print('train_batch_size', args.train_batch_size)
-        print('--------------------')
-        print('featureC:', self.featureC)
+        print('------------------------------')
         print('density_n_comp:', density_n_comp) 
-        print('appearance_n_comp:', appearance_n_comp)
+        print('appearance_n_comp:', density_n_comp)
         print('matMode:', self.matMode)
         print('vecMode:', self.vecMode)
-        print('--------------------')
+        print('------------------------------')
         print('alphaMask_thres:', self.alphaMask_thres)
         print('rayMarch_weight_thres:', self.rayMarch_weight_thres)
-        print('--------------------')
-        print('no_batching:', args.no_batching)
+        print('------------------------------')
         print('info_nerf:', args.info_nerf)
+        print('no_batching:', args.no_batching)
+        print('------------------------------')
         print('entropy:', args.entropy)
-        print('N_entropy:', args.entropy)
+        print('------------------------------')
         print('smoothing:', args.smoothing)
-        print('smooth_sampling_method:', args.smooth_sampling_method)
-        print('free_reg:', args.free_reg)
-        print('--------------------')
         print('device:', device)
         print('\n\n')
 
@@ -647,7 +641,6 @@ class TensorBase(torch.nn.Module):
         alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
         app_mask = weight > self.rayMarch_weight_thres
         
-        n_valib_rgb = 1
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
             valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_freq_reg_step)
@@ -665,5 +658,6 @@ class TensorBase(torch.nn.Module):
         with torch.no_grad():
             depth_map = torch.sum(weight * z_vals, -1)
             disp_map  = depth_map + (1. - acc_map) * rays_chunk[..., -1]
-        
+        """print(sigma.shape, rgb_map.shape, rgb.shape)
+        exit()"""
         return rgb_map, disp_map, all_rgb_voxel, sigma, n_valib_rgb, acc_map, alpha, dists
