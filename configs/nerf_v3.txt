@@ -1,15 +1,16 @@
 #------ Folder ------
 dataset_name  = own_data
-datadir       = /content/drive/MyDrive/Human2.0/rendered_images/0525_608_800_S10_train_enhance
+datadir       = /content/drive/MyDrive/AI_dataset/Thuman2.0/rendered_images/0525_800_800_30_3S_raw
 expname       = 0525
 basedir       = ./log
+N_imgs        = 10
 
 
 #------ Config parameters ------
-n_iters           = 15000
+n_iters           = 30000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
-step_ratio        = 0.7 # caculate number of sample per ray
+step_ratio        = 0.8 # caculate number of sample per ray
 
 
 #------ Model name ------
@@ -28,14 +29,14 @@ data_dim_color  = 27
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 5
+netdepth            = 3
 body_arch           = mlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
 trial               = True
 layerwise_netwidths = ''
-dropout_ratio       = 0.0
+dropout_ratio       = 0.5
 
 
 #------ Resolution ------
@@ -61,8 +62,8 @@ export_mesh   = True
 
 
 #------ Decomposition ------
-n_lamb_sigma    = [16,16,16]
-n_lamb_sh       = [48,48,48]
+n_lamb_sigma      = [16,16,16]
+n_lamb_sh         = [48,48,48]
 # n_lamb_sigma    = [96]
 # n_lamb_sh       = [288]
 
@@ -81,7 +82,7 @@ freq_reg_ratio  = 0.9
 
 #------ Ortho reg ------
 ortho_reg     = True
-Ortho_weight  = 0.0
+Ortho_weight  = 0.1
 
 
 #------ Occlusion reg ------
@@ -93,19 +94,20 @@ occ_wb_prior        = False
 
 
 #------ L1 reg ------
-L1_reg = True
-L1_weight_inital  = 1e-5
-L1_weight_rest    = 1e-5
+L1_reg            = True
+L1_weight_inital  = 1e-4
+L1_weight_rest    = 1e-4
 
 
 #------ Info Nerf ------
-info_nerf = True
-no_batching = True
+info_nerf     = True
+no_batching   = False 
+
 
 #------ Entropy loss ------
 entropy                   = True
 N_entropy                 = 1024
-entropy_ray_zvals_lambda  = 0.001
+entropy_ray_zvals_lambda  = 0.01
 precrop_iters             = 500
 precrop_frac              = 0.5
 entropy_acc_threshold     = 0.01

@@ -316,15 +316,15 @@ class TensorBase(torch.nn.Module):
         print('pos_pe:', self.pos_pe)
         print('view_pe:', self.view_pe)
         print('fea_pe:', self.fea_pe)
-        print('------------------------------')
+        print('==============================')
         print('density_n_comp:', density_n_comp) 
         print('appearance_n_comp:', density_n_comp)
         print('matMode:', self.matMode)
         print('vecMode:', self.vecMode)
-        print('------------------------------')
+        print('==============================')
         print('alphaMask_thres:', self.alphaMask_thres)
         print('rayMarch_weight_thres:', self.rayMarch_weight_thres)
-        print('------------------------------')
+        print('==============================')
         print('info_nerf:', args.info_nerf)
         print('no_batching:', args.no_batching)
         print('------------------------------')
@@ -641,6 +641,7 @@ class TensorBase(torch.nn.Module):
         alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
         app_mask = weight > self.rayMarch_weight_thres
         
+        n_valib_rgb = (0, 1)
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
             valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_freq_reg_step)
