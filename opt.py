@@ -14,8 +14,10 @@ def config_parser(cmd=None):
                         help='input data directory')
     parser.add_argument("--progress_refresh_rate", type=int, default=10,
                         help='how many iterations to show psnrs or iters')
-    parser.add_argument("--N_imgs", type=int, default=0,
-                        help='Number of images')                        
+    parser.add_argument("--N_train_imgs", type=int, default=0,
+                        help='Number of train images')
+    parser.add_argument("--N_test_imgs", type=int, default=0,
+                        help='Number of test images')                                                                        
     parser.add_argument("--stop_thresh", type=float, default=-1.0,
                         help='Earling stop')                           
     parser.add_argument("--stop_loop", type=int, default=-1,

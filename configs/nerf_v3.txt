@@ -4,16 +4,17 @@ dataset_name  = blender
 datadir       = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
 expname       = lego
 basedir       = ./log
-N_imgs        = 10
+N_train_imgs  = 10
+N_test_imgs   = 10
 
 
 #------ Config parameters ------
-n_iters           = 1000
+n_iters           = 15000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
-step_ratio        = 1.5 # caculate number of sample per ray
-stop_thresh       = 0.5
-stop_loop         = 2
+step_ratio        = 1 # caculate number of sample per ray
+# stop_thresh       = 0.5
+# stop_loop         = 2
 
 
 #------ Model name ------
