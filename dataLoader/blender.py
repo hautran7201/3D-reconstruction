@@ -11,7 +11,7 @@ from .ray_utils import *
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1):
+    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0):
 
         self.w = 800 
         self.h = 800
@@ -21,6 +21,8 @@ class BlenderDataset(Dataset):
         self.split = split
         self.is_stack = is_stack
         self.img_wh = (int(self.w/downsample),int(self.h/downsample))
+        self.tqdm = tqdm
+        self.N_imgs = N_imgs
         self.define_transforms()
 
         self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
@@ -65,40 +67,67 @@ class BlenderDataset(Dataset):
 
         img_eval_interval = 1 if self.N_vis < 0 else len(self.meta['frames']) // self.N_vis
         idxs = list(range(0, len(self.meta['frames']), img_eval_interval))
-        for i in tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})'):#img_list:#
 
-            frame = self.meta['frames'][i]
-            pose = np.array(frame['transform_matrix']) @ self.blender2opencv
-            c2w = torch.FloatTensor(pose)
-            self.poses += [c2w]
+        if self.N_imgs > 0 and self.N_imgs < len(idxs):
+            idxs = np.random.choice(idxs, self.N_imgs, replace=False)
 
-            file_path = frame['file_path'].split('\\')[-1]
-            image_path = os.path.join(self.root_dir, self.split, file_path)
-            self.image_paths += [image_path]
-            img = Image.open(image_path)
-            
-            if self.downsample!=1.0:
-                img = img.resize(self.img_wh, Image.LANCZOS)
-            img = self.transform(img)  # (4, h, w)
-            img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA
-            img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
-            self.all_rgbs += [img]
+        if self.tqdm:
+            for i in tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})'):#img_list:#
+
+                frame = self.meta['frames'][i]
+                pose = np.array(frame['transform_matrix']) @ self.blender2opencv
+                c2w = torch.FloatTensor(pose)
+                self.poses += [c2w]
+
+                file_path = frame['file_path'].split('.')[-1]
+                image_path = self.root_dir + file_path + '.png'
+                self.image_paths += [image_path]
+                img = Image.open(image_path)
+                
+                if self.downsample!=1.0:
+                    img = img.resize(self.img_wh, Image.LANCZOS)
+                img = self.transform(img)  # (4, h, w)
+                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA
+                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
+                self.all_rgbs += [img]
 
 
-            rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
-            self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
+                rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
+                self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
+        else:
+            for i in idxs:
+                frame = self.meta['frames'][i]
+                pose = np.array(frame['transform_matrix']) @ self.blender2opencv
+                c2w = torch.FloatTensor(pose)
+                self.poses += [c2w]
+
+                file_path = frame['file_path'].split('.')[-1]
+                image_path = self.root_dir + file_path + '.png'
+                self.image_paths += [image_path]
+                img = Image.open(image_path)
+                
+                if self.downsample!=1.0:
+                    img = img.resize(self.img_wh, Image.LANCZOS)
+                img = self.transform(img)  # (4, h, w)
+                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA
+                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
+                self.all_rgbs += [img]
+
+
+                rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
+                self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
 
 
         self.poses = torch.stack(self.poses)
         if not self.is_stack:
             self.all_rays = torch.cat(self.all_rays, 0)  # (len(self.meta['frames])*h*w, 3)
             self.all_rgbs = torch.cat(self.all_rgbs, 0)  # (len(self.meta['frames])*h*w, 3)
-            self.all_depth = torch.cat(self.all_depth, 0)  # (len(self.meta['frames])*h*w, 3)
+            # self.all_depth = torch.cat(self.all_depth, 0)  # (len(self.meta['frames])*h*w, 3)
 
         else:
             self.all_rays = torch.stack(self.all_rays, 0)  # (len(self.meta['frames]),h*w, 3)
             self.all_rgbs = torch.stack(self.all_rgbs, 0).reshape(-1,*self.img_wh[::-1], 3)  # (len(self.meta['frames]),h,w,3)
-            self.all_masks = torch.stack(self.all_masks, 0).reshape(-1,*self.img_wh[::-1])  # (len(self.meta['frames]),h,w,3)
+            # self.all_masks = torch.stack(self.all_masks, 0).reshape(-1,*self.img_wh[::-1])  # (len(self.meta['frames]),h,w,3)
 
 
     def define_transforms(self):

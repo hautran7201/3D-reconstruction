@@ -107,6 +107,10 @@ def reconstruction(args):
     near_far = train_dataset.near_far
     ndc_ray = args.ndc_ray
     N_entropy = args.N_entropy
+    aabb = train_dataset.scene_bbox.to(device)
+    reso_cur = N_to_reso(args.N_voxel_init, aabb)
+    nSamples = min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio))    
+    stop_count = 0
   
     # init resolution
     upsamp_list = args.upsamp_list
@@ -117,9 +121,9 @@ def reconstruction(args):
     if args.add_timestamp:
         logfolder = f'{args.basedir}/{args.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
     else:
-        logfolder = f'{args.basedir}/{args.expname}'
-    
-    if args.overwrt:
+        logfolder = f'{args.basedir}/{args.N_imgs}{args.expname}_{int(args.n_iters/1000)}k_spl{nSamples}_free({args.free_reg})_infoN({args.info_nerf})_noBatch({args.no_batching})entropy({args.entropy})smoo({args.smoothing})_v{args.view_pe}p{args.pos_pe}f{args.fea_pe}'
+                     
+    if args.overwrt and os.path.exists(logfolder):
       import shutil
       shutil.rmtree(logfolder)
 
@@ -134,9 +138,6 @@ def reconstruction(args):
 
     # init parameters
     # tensorVM, renderer = init_parameters(args, train_dataset.scene_bbox.to(device), reso_list[0])
-    aabb = train_dataset.scene_bbox.to(device)
-    reso_cur = N_to_reso(args.N_voxel_init, aabb)
-    nSamples = min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio))    
 
     if os.path.exists(args.ckpt):
         os.remove(args.ckpt)
@@ -438,7 +439,7 @@ def reconstruction(args):
                     smoothing_loss = 0        
         total_loss += smoothing_lambda * smoothing_loss
 
-        if args.ortho_reg:
+        if Ortho_reg_weight > 0:
             loss_reg = tensorf.vector_comp_diffs()
             total_loss += Ortho_reg_weight*loss_reg
             summary_writer.add_scalar('train/reg', loss_reg.detach().item(), global_step=iteration)
@@ -448,7 +449,7 @@ def reconstruction(args):
             total_loss += L1_reg_weight*loss_reg_L1
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
 
-        if args.occ_reg:
+        if args.occ_reg_loss_mult > 0:
             occ_reg_loss = nerf_math.lossfun_occ_reg(
                 all_rgb_voxel, 
                 sigma, 
@@ -458,13 +459,13 @@ def reconstruction(args):
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
             total_loss += occ_reg_loss
 
-        if args.tv_reg_density:
+        if TV_weight_density > 0:
             TV_weight_density *= lr_factor
             loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
             total_loss = total_loss + loss_tv
             summary_writer.add_scalar('train/reg_tv_density', loss_tv.detach().item(), global_step=iteration)
 
-        if args.tv_reg_app:
+        if TV_weight_app > 0:
             TV_weight_app *= lr_factor
             loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
             total_loss = total_loss + loss_tv
@@ -488,14 +489,14 @@ def reconstruction(args):
                 f'Iteration {iteration:05d}:'
                 + f' valib_rgb = {number_valib_rgb[0]}/{number_valib_rgb[1]}({round((number_valib_rgb[0]*100)/number_valib_rgb[1], 2)}%)'
                 + f' total_loss = {total_loss:.6f}'
+                + f' train_psnr = {float(np.mean(PSNRs)):.2f}'
+                + f' test_psnr = {float(np.mean(PSNRs_test)):.2f}'   
                 + f' entropy = {args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss:.6f}'
                 + f' smoothing = {smoothing_lambda * smoothing_loss:.6f}'
                 + f' ortho = {Ortho_reg_weight*loss_reg:.6f}'
                 + f' L1 = {L1_reg_weight*loss_reg_L1:.6f}'
-                + f' L1 = {args.occ_reg_loss_mult*occ_reg_loss:.6f}'
+                + f' occ = {args.occ_reg_loss_mult*occ_reg_loss:.6f}'
                 + f' mse = {loss:.6f}'
-                + f' train_psnr = {float(np.mean(PSNRs)):.2f}'
-                + f' test_psnr = {float(np.mean(PSNRs_test)):.2f}'   
             )
                 
             
@@ -540,24 +541,15 @@ def reconstruction(args):
               device              = device
               )
 
-        """if iteration % args.vis_every == args.vis_every - 1 and args.N_vis!=0:
-            PSNR_test = evaluation(
-              test_dataset, 
-              tensorf, 
-              args, 
-              renderer, 
-              iteration, 
-              args.n_iters, 
-              f'{logfolder}/imgs_vis/', 
-              N_vis=args.N_vis,
-              prtx=f'{iteration:06d}_', 
-              N_samples=nSamples, 
-              white_bg = white_bg, 
-              ndc_ray=ndc_ray, 
-              compute_extra_metrics=False
-              )
-            PSNRs_test.append(np.mean(PSNR_test))
-            summary_writer.add_scalar('test/psnr', np.mean(PSNRs_test), global_step=iteration)"""
+        # early stop
+        if len(history['test_psnr']) > 2:
+            if abs(history['test_psnr'][-1] - history['test_psnr'][-2]) < args.stop_thresh:
+                stop_count += 1
+                if stop_count == args.stop_loop:
+                    break
+            else:
+                stop_count = 0
+
             
         if iteration in update_AlphaMask_list:
 
@@ -594,6 +586,8 @@ def reconstruction(args):
             optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
         
     tensorf.save(f'{logfolder}/{args.expname}.th')
+    args.add('--ckpt', help='checkpoint', type=str, default='{logfolder}/{args.expname}.th')
+
 
     for key in list(history.keys())[1:]:
         plt.figure()

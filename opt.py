@@ -16,6 +16,12 @@ def config_parser(cmd=None):
                         help='how many iterations to show psnrs or iters')
     parser.add_argument("--N_imgs", type=int, default=0,
                         help='Number of images')                        
+    parser.add_argument("--stop_thresh", type=float, default=-1.0,
+                        help='Earling stop')                           
+    parser.add_argument("--stop_loop", type=int, default=-1,
+                        help='stop after condition loop')                         
+    
+
 
     parser.add_argument('--with_depth', action='store_true')
     parser.add_argument('--downsample_train', type=float, default=1.0)
