@@ -123,7 +123,7 @@ def reconstruction(args):
     if args.add_timestamp:
         logfolder = f'{args.basedir}/{args.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
     else:
-        logfolder = f'{args.basedir}/{args.N_imgs}{args.expname}_{int(args.n_iters/1000)}k_spl{nSamples}_free({args.free_reg})_infoN({args.info_nerf})_noBatch({args.no_batching})entropy({args.entropy})smoo({args.smoothing})_v{args.view_pe}p{args.pos_pe}f{args.fea_pe}'
+        logfolder = f'{args.basedir}/{args.N_train_imgs}{args.expname}_{int(args.n_iters/1000)}k_spl{nSamples}_free({args.free_reg})_infoN({args.info_nerf})_noBatch({args.no_batching})entropy({args.entropy})smoo({args.smoothing})_v{args.view_pe}p{args.pos_pe}f{args.fea_pe}'
                      
     if args.overwrt and os.path.exists(logfolder):
       import shutil

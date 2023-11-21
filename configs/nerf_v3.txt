@@ -4,8 +4,8 @@ dataset_name  = blender
 datadir       = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
 expname       = lego
 basedir       = ./log
-N_train_imgs  = 10
-N_test_imgs   = 10
+N_train_imgs  = 8
+N_test_imgs   = 25
 
 
 #------ Config parameters ------
