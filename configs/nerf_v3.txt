@@ -1,7 +1,7 @@
 #------ Folder ------
 dataset_name  = blender
 # datadir     = /content/drive/MyDrive/Human2.0/rendered_images/0525_800_800_30_3S_raw
-datadir       = /content/drive/MyDrive/Human2.0/NeRF_Data/nerf_synthetic/lego
+datadir       = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
 expname       = lego
 basedir       = ./log
 N_imgs        = 10

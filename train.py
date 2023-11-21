@@ -38,9 +38,11 @@ class SimpleSampler:
 
 
 @torch.no_grad()
-def export_mesh(args):
+def export_mesh(args, ckpt_path):
 
-    ckpt = torch.load(args.ckpt, map_location=device)
+    print(ckpt_path)
+    # ckpt = torch.load(args.ckpt, map_location=device)
+    ckpt = torch.load(ckpt_path, map_location=device)
     kwargs = ckpt['kwargs']
     # kwargs.update({'device': device})
     print(args.model_name)
@@ -49,7 +51,7 @@ def export_mesh(args):
     tensorf.load(ckpt)
 
     alpha,_ = tensorf.getDenseAlpha()
-    convert_sdf_samples_to_ply(alpha.cpu(), f'{args.ckpt[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=0.005)
+    convert_sdf_samples_to_ply(alpha.cpu(), f'{ckpt_path[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=0.005)
 
 
 @torch.no_grad()
@@ -139,13 +141,13 @@ def reconstruction(args):
     # init parameters
     # tensorVM, renderer = init_parameters(args, train_dataset.scene_bbox.to(device), reso_list[0])
 
-    if os.path.exists(args.ckpt):
-        os.remove(args.ckpt)
-
-    file_path = Path(args.ckpt)
+    ckpt = '{logfolder}/{args.expname}.th'
+    # file_path = Path(args.ckpt)
+    file_path = Path(ckpt)
     file_path.is_file()
     if file_path.is_file():
-        ckpt = torch.load(args.ckpt, map_location=device)
+        # ckpt = torch.load(args.ckpt, map_location=device)
+        ckpt = torch.load(ckpt, map_location=device)
         kwargs = ckpt['kwargs']
         kwargs.update({'device':device})
         tensorf = eval(args.model_name)(**kwargs)
@@ -541,14 +543,14 @@ def reconstruction(args):
               device              = device
               )
 
-        # early stop
-        if len(history['test_psnr']) > 2:
+        """# early stop
+        if len(history['test_psnr']) > 10:
             if abs(history['test_psnr'][-1] - history['test_psnr'][-2]) < args.stop_thresh:
                 stop_count += 1
                 if stop_count == args.stop_loop:
                     break
             else:
-                stop_count = 0
+                stop_count = 0"""
 
             
         if iteration in update_AlphaMask_list:
@@ -586,7 +588,6 @@ def reconstruction(args):
             optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
         
     tensorf.save(f'{logfolder}/{args.expname}.th')
-    args.add('--ckpt', help='checkpoint', type=str, default='{logfolder}/{args.expname}.th')
 
 
     for key in list(history.keys())[1:]:
@@ -666,6 +667,8 @@ def reconstruction(args):
 
     create_gif(f"{logfolder}/gif/plot/{args.train_vis_every}", f"{logfolder}/gif/training.gif")
 
+    return f'{logfolder}/{args.expname}.th'
+
 
 if __name__ == '__main__':
 
@@ -676,12 +679,11 @@ if __name__ == '__main__':
     args = config_parser()
 
     if  args.export_mesh and args.config:
-        reconstruction(args)        
-        export_mesh(args)   
+        ckpt_path = reconstruction(args)        
+        export_mesh(args, ckpt_path)   
 
     elif args.export_mesh:
         export_mesh(args)        
 
     if args.render_only and (args.render_test or args.render_path):
         print(render_test(args))
-        
