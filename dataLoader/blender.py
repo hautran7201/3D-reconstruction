@@ -11,7 +11,7 @@ from .ray_utils import *
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0):
+    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0, indexs=[]):
 
         self.w = 800 
         self.h = 800
@@ -23,6 +23,7 @@ class BlenderDataset(Dataset):
         self.img_wh = (int(self.w/downsample),int(self.h/downsample))
         self.tqdm = tqdm
         self.N_imgs = N_imgs
+        self.indexs = []
         self.define_transforms()
 
         self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
@@ -68,7 +69,9 @@ class BlenderDataset(Dataset):
         img_eval_interval = 1 if self.N_vis < 0 else len(self.meta['frames']) // self.N_vis
         idxs = list(range(0, len(self.meta['frames']), img_eval_interval))
 
-        if self.N_imgs > 0 and self.N_imgs < len(idxs):
+        if len(self.indexs) > 0:
+            idxs = self.idxs
+        elif self.N_imgs > 0 and self.N_imgs < len(idxs):
             idxs = np.random.choice(idxs, self.N_imgs, replace=False)
 
         if self.tqdm:

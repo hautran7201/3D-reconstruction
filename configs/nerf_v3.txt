@@ -1,7 +1,7 @@
 #------ Folder ------
 dataset_name  = blender
 # datadir     = /content/drive/MyDrive/Human2.0/rendered_images/0525_800_800_30_3S_raw
-datadir       = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
+datadir       = /content/drive/MyDrive/AI_dataset/nerf_synthetic/lego
 expname       = lego
 basedir       = ./log
 N_train_imgs  = 8
@@ -12,7 +12,7 @@ N_test_imgs   = 25
 n_iters           = 15000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
-step_ratio        = 1 # caculate number of sample per ray
+step_ratio        = 1.5 # caculate number of sample per ray
 # stop_thresh       = 0.5
 # stop_loop         = 2
 
@@ -25,16 +25,16 @@ overwrt       = True
 
 
 #------ Feature config ------
-view_pe         = 4
-pos_pe          = 4
-fea_pe          = 4
+view_pe         = 8
+pos_pe          = 8
+fea_pe          = 8
 data_dim_color  = 27
 
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 3
-body_arch           = mlp # mlp, resmlp
+netdepth            = 11
+body_arch           = resmlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
@@ -73,7 +73,7 @@ n_lamb_sh         = [48,48,48]
 
 
 #------ Frequence reg ------
-free_reg        = True
+free_reg        = False
 freq_reg_ratio  = 0.9
 
 
@@ -94,8 +94,8 @@ Ortho_weight  = 0.1
 
 
 #------ L1 reg ------
-L1_weight_inital  = 1e-4
-L1_weight_rest    = 1e-4
+L1_weight_inital  = 8e-4
+L1_weight_rest    = 4e-4
 
 
 #------ Info Nerf ------
