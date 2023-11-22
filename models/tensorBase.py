@@ -251,6 +251,11 @@ class NeRF_v3_2(torch.nn.Module):
                   torch.nn.Sigmoid()])
 
     def forward(self, pts, viewdirs, features, step, total_freq_reg_step):
+
+        f_mask = get_freq_reg_mask(features.shape[1], step, total_freq_reg_step, None, device=features.device).tile((features.shape[0], 1))                        
+        features = features * f_mask
+        v_mask = get_freq_reg_mask(viewdirs.shape[1], step, total_freq_reg_step, None, device=viewdirs.device).tile((viewdirs.shape[0], 1))                        
+        viewdirs = viewdirs * v_mask
         indata = [features, viewdirs]
 
         if self.pospe > 0:
@@ -318,7 +323,7 @@ class TensorBase(torch.nn.Module):
         print('fea_pe:', self.fea_pe)
         print('==============================')
         print('density_n_comp:', density_n_comp) 
-        print('appearance_n_comp:', density_n_comp)
+        print('appearance_n_comp:', appearance_n_comp)
         print('matMode:', self.matMode)
         print('vecMode:', self.vecMode)
         print('==============================')
@@ -571,6 +576,7 @@ class TensorBase(torch.nn.Module):
 
             mask_filtered.append(mask_inbbox.cpu())
 
+        print(len(mask_filtered), len(mask_filtered[-1]), (all_rgbs.shape[:-1]))
         mask_filtered = torch.cat(mask_filtered).view(all_rgbs.shape[:-1])
 
         print(f'Ray filtering done! takes {time.time()-tt} s. ray mask ratio: {torch.sum(mask_filtered) / N}')

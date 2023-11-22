@@ -101,7 +101,8 @@ def reconstruction(args):
     idxs = [26, 86, 2, 55, 75, 16, 73, 8]
     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_train_imgs, indexs=idxs)
     stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=args.N_train_imgs, indexs=idxs)
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
+    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=10)
+    final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
     print('\n\n')
 
     train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=1)
@@ -177,11 +178,11 @@ def reconstruction(args):
     allrays, allrgbs = train_dataset.all_rays.to(device), train_dataset.all_rgbs.to(device)
 
     if not args.ndc_ray:
-        allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs, bbox_only=True)
+        allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs, bbox_only=True)    
 
     # Determine N_rand, N_entropy info nerf
     use_batching = not args.no_batching
-    if args.info_nerf:
+    """if args.info_nerf:
         if use_batching:
             if args.entropy and (args.N_entropy!=0):
                 N_rand = args.train_batch_size - args.N_entropy
@@ -195,7 +196,9 @@ def reconstruction(args):
             else:
                 N_rand = int(args.train_batch_size/2)
     else:
-        N_rand = args.train_batch_size
+        N_rand = args.train_batch_size"""
+    
+    N_rand = args.train_batch_size
 
 
     trainingSampler = SimpleSampler(allrays.shape[0], N_rand)
@@ -243,7 +246,7 @@ def reconstruction(args):
                 batch_rays, target_s = allrays[train_ray_idx].to(device), allrgbs[train_ray_idx].to(device)
               
                 # Random from one image
-                img_i = np.random.choice([0,1,2,3,4,5,6,7,8,9])
+                img_i = np.random.choice(8)
                 target = stack_train_dataset.all_rgbs[img_i].to(device)
                     
                 rgb_pose = stack_train_dataset.poses[img_i][:3, :4].to(device)
@@ -454,12 +457,12 @@ def reconstruction(args):
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
 
         if args.occ_reg_loss_mult > 0:
-            occ_reg_loss = nerf_math.lossfun_occ_reg(
+            occ_reg_loss = np.mean(nerf_math.lossfun_occ_reg(
                 all_rgb_voxel, 
                 sigma, 
                 reg_range=args.occ_reg_range,
                 wb_prior=args.occ_wb_prior, 
-                wb_range=args.occ_wb_range)
+                wb_range=args.occ_wb_range))
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
             total_loss += occ_reg_loss
 
@@ -602,7 +605,6 @@ def reconstruction(args):
         plt.grid(True)
         plt.savefig(f'{logfolder}/plot_image/{key}_plot.png')
         plt.close()
-    np.savez(f'{logfolder}/{args.expname}_history.npz', **history)
 
     if args.render_train:
         os.makedirs(f'/content/metric_plot/0525/imgs_traning', exist_ok=True)
@@ -630,7 +632,7 @@ def reconstruction(args):
     if args.render_test:
         os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
         PSNR_test = evaluation(
-          test_dataset,
+          final_test_dataset,
           tensorf, 
           args, 
           renderer, 
@@ -643,9 +645,11 @@ def reconstruction(args):
           ndc_ray=ndc_ray,
           device=device
           )
+        history['final_test_psnr'] = np.mean(PSNR_test)
         summary_writer.add_scalar('test/psnr_all', np.mean(PSNR_test), global_step=iteration)
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
 
+    np.savez(f'{logfolder}/{args.expname}_history.npz', **history)
 
     if args.render_path:
         c2ws = test_dataset.render_path

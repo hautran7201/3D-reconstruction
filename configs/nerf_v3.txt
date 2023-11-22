@@ -12,7 +12,7 @@ N_test_imgs   = 25
 n_iters           = 15000
 train_batch_size  = 4096
 featureC          = 128 # for old mlp 
-step_ratio        = 1.5 # caculate number of sample per ray
+step_ratio        = 0.8 # caculate number of sample per ray
 # stop_thresh       = 0.5
 # stop_loop         = 2
 
@@ -25,16 +25,16 @@ overwrt       = True
 
 
 #------ Feature config ------
-view_pe         = 8
-pos_pe          = 8
-fea_pe          = 8
-data_dim_color  = 27
+view_pe         = 4
+pos_pe          = 4
+fea_pe          = 4
+data_dim_color  = 18
 
 
 #------ Resmlp_v3 config ------
 netwidth            = 128 
-netdepth            = 11
-body_arch           = resmlp # mlp, resmlp
+netdepth            = 3
+body_arch           = mlp # mlp, resmlp
 resmlp_act          = relu # lrelu, relu
 linear_tail         = False
 use_residual        = True
@@ -48,7 +48,7 @@ N_voxel_init            = 2097156 # 128**3
 N_voxel_final           = 27000000 # 300**3 16777216 27000000
 upsamp_list             = [2000,3000,4000,5500,7000]
 update_AlphaMask_list   = [2000,4000]
-downsample_train        = 1
+downsample_train        = 2
 
 
 #------ Test ------
@@ -73,7 +73,7 @@ n_lamb_sh         = [48,48,48]
 
 
 #------ Frequence reg ------
-free_reg        = False
+free_reg        = True
 freq_reg_ratio  = 0.9
 
 
