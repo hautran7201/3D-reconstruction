@@ -251,7 +251,7 @@ def reconstruction(args):
                     
                 rgb_pose = stack_train_dataset.poses[img_i][:3, :4].to(device)
                 W, H = stack_train_dataset.img_wh
-                focal = (stack_train_dataset.focal_x, stack_train_dataset.focal_y)
+                focal = (stack_train_dataset.focal, stack_train_dataset.focal)
                 if N_rand is not None:
                     directions = ray_utils.get_ray_directions(H, W, focal).to(device)  # (H, W, 3), (H, W, 3)
                     rays_o, rays_d = ray_utils.get_rays(directions, rgb_pose)
@@ -457,12 +457,12 @@ def reconstruction(args):
             summary_writer.add_scalar('train/reg_l1', loss_reg_L1.detach().item(), global_step=iteration)
 
         if args.occ_reg_loss_mult > 0:
-            occ_reg_loss = np.mean(nerf_math.lossfun_occ_reg(
+            occ_reg_loss = nerf_math.lossfun_occ_reg(
                 all_rgb_voxel, 
                 sigma, 
                 reg_range=args.occ_reg_range,
                 wb_prior=args.occ_wb_prior, 
-                wb_range=args.occ_wb_range))
+                wb_range=args.occ_wb_range)
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
             total_loss += occ_reg_loss
 
@@ -689,7 +689,7 @@ if __name__ == '__main__':
         export_mesh(args, ckpt_path)  
 
         import shutil 
-        shutil.copy(args.config, ckpt_path[:-3]) 
+        shutil.copy(args.config, ckpt_path[:-3]+'.txt') 
 
     elif args.export_mesh:
         export_mesh(args)        

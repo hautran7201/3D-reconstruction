@@ -1,7 +1,7 @@
 #------ Folder ------
 dataset_name  = blender
 # datadir     = /content/drive/MyDrive/Human2.0/rendered_images/0525_800_800_30_3S_raw
-datadir       = /content/drive/MyDrive/AI_dataset/nerf_synthetic/lego
+datadir       = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
 expname       = lego
 basedir       = ./log
 N_train_imgs  = 8
@@ -10,7 +10,7 @@ N_test_imgs   = 25
 
 #------ Config parameters ------
 n_iters           = 15000
-train_batch_size  = 4096
+train_batch_size  = 1024
 featureC          = 128 # for old mlp 
 step_ratio        = 0.8 # caculate number of sample per ray
 # stop_thresh       = 0.5
@@ -45,7 +45,7 @@ dropout_ratio       = 0.5
 
 #------ Resolution ------
 N_voxel_init            = 2097156 # 128**3
-N_voxel_final           = 27000000 # 300**3 16777216 27000000
+N_voxel_final           = 125000000 # 300**3 16777216 27000000
 upsamp_list             = [2000,3000,4000,5500,7000]
 update_AlphaMask_list   = [2000,4000]
 downsample_train        = 2
@@ -66,15 +66,15 @@ export_mesh   = True
 
 
 #------ Decomposition ------
-n_lamb_sigma      = [16,16,16]
-n_lamb_sh         = [48,48,48]
+n_lamb_sigma      = [48,48,48]
+n_lamb_sh         = [96,96,96]
 # n_lamb_sigma    = [96]
 # n_lamb_sh       = [288]
 
 
 #------ Frequence reg ------
 free_reg        = True
-freq_reg_ratio  = 0.9
+freq_reg_ratio  = 0.8
 
 
 #------ Occlusion reg ------
@@ -100,7 +100,7 @@ L1_weight_rest    = 4e-4
 
 #------ Info Nerf ------
 info_nerf     = False
-no_batching   = False 
+no_batching   = True
 
 
 #------ Entropy loss ------
@@ -113,7 +113,7 @@ entropy_acc_threshold     = 0.01
 
 
 #------ Smothing ------
-smoothing = True
+smoothing = False
 
 
 #------ Mask ------
