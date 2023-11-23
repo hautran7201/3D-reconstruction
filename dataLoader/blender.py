@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 import json
 from tqdm import tqdm
 import os
-from PIL import Image
+from PIL import Image, ImageEnhance
 from torchvision import transforms as T
 
 
@@ -11,7 +11,8 @@ from .ray_utils import *
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0, indexs=[]):
+    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0, indexs=[],
+    enhance=None):
 
         self.w = 800 
         self.h = 800
@@ -24,6 +25,7 @@ class BlenderDataset(Dataset):
         self.tqdm = tqdm
         self.N_imgs = N_imgs
         self.indexs = []
+        self.enhance = enhance
         self.define_transforms()
 
         self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
@@ -33,7 +35,7 @@ class BlenderDataset(Dataset):
         self.define_proj_mat()
 
         self.white_bg = True
-        self.near_far = [2.0,6.0]
+        self.near_far = [1.5,6.5]
         
         self.center = torch.mean(self.scene_bbox, axis=0).float().view(1, 1, 3)
         self.radius = (self.scene_bbox[1] - self.center).float().view(1, 1, 3)
@@ -85,6 +87,22 @@ class BlenderDataset(Dataset):
                 image_path = self.root_dir + file_path + '.png'
                 self.image_paths += [image_path]
                 img = Image.open(image_path)
+
+                if self.enhance != None:
+                  for k, v in self.enhance.items():
+                      if k == 'shape':
+                          enhancer = ImageEnhance.Sharpness(img)
+                          img = enhancer.enhance(v) 
+                      elif k == 'contract': 
+                          enhancer = ImageEnhance.Contrast(img)
+                          img = enhancer.enhance(v) 
+                      elif k == 'bright':
+                          enhancer = ImageEnhance.Brightness(img)
+                          img = enhancer.enhance(v)
+                      elif k == 'satur':
+                          enhancer = ImageEnhance.Color(img)
+                          img = enhancer.enhance(v)
+
                 
                 if self.downsample!=1.0:
                     img = img.resize(self.img_wh, Image.LANCZOS)

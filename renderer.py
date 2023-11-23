@@ -27,7 +27,7 @@ def create_gif(path_to_dir, name_gif):
     images = []
     for filename in filenames:
         images.append(imageio.imread(f'{path_to_dir}/{filename}'))
-    kargs = {"duration": 0.25}
+    kargs = {"duration": 1.0}
     imageio.mimsave(name_gif, images, "GIF", **kargs)
 
 @torch.no_grad()

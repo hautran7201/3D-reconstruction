@@ -189,19 +189,19 @@ class TensorVMSplit(TensorBase):
     def density_L1(self):
         total = 0
         for idx in range(len(self.density_plane)):
-            total = total + torch.mean(torch.abs(self.density_plane[idx])) + torch.mean(torch.abs(self.density_line[idx]))# + torch.mean(torch.abs(self.app_plane[idx])) + torch.mean(torch.abs(self.density_plane[idx]))
+            total = total + torch.mean(torch.abs(self.density_plane[idx])) + torch.mean(torch.abs(self.density_line[idx])) + torch.mean(torch.abs(self.app_plane[idx])) + torch.mean(torch.abs(self.density_plane[idx]))
         return total
     
     def TV_loss_density(self, reg):
         total = 0
         for idx in range(len(self.density_plane)):
-            total = total + reg(self.density_plane[idx]) * 1e-2 #+ reg(self.density_line[idx]) * 1e-3
+            total = total + reg(self.density_plane[idx]) * 1e-2 + reg(self.density_line[idx]) * 1e-3
         return total
         
     def TV_loss_app(self, reg):
         total = 0
         for idx in range(len(self.app_plane)):
-            total = total + reg(self.app_plane[idx]) * 1e-2 #+ reg(self.app_line[idx]) * 1e-3
+            total = total + reg(self.app_plane[idx]) * 1e-2 + reg(self.app_line[idx]) * 1e-3
         return total
 
     def compute_densityfeature(self, xyz_sampled):

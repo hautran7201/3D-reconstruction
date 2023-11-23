@@ -99,14 +99,18 @@ def reconstruction(args):
     dataset = dataset_dict[args.dataset_name]
 
     idxs = [26, 86, 2, 55, 75, 16, 73, 8]
-    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_train_imgs, indexs=idxs)
-    stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=args.N_train_imgs, indexs=idxs)
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=10)
-    final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
+    # enhance = {'satur': 1.7, 'shape': 1.5}
+    enhance = None
+
+    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_train_imgs, indexs=idxs, enhance=enhance)
+    stack_train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=args.N_train_imgs, indexs=idxs, enhance=enhance)
+    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=10, enhance=enhance)
+    final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs, enhance=enhance)
+    print('Enhance:', enhance)
     print('\n\n')
 
-    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=1)
-    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=1)
+    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=1, enhance=enhance)
+    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, N_imgs=1, enhance=enhance)
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -225,7 +229,7 @@ def reconstruction(args):
 
     if args.entropy:
         N_entropy = args.N_entropy
-        fun_entropy_loss = nerf_math.EntropyLoss(args, nSamples)
+        fun_entropy_loss = nerf_math.EntropyLoss(args)
 
     if args.smoothing:
         get_near_c2w = ray_utils.GetNearC2W(args)
@@ -293,7 +297,7 @@ def reconstruction(args):
                 #            Sampling for unseen rays                  #
                 ########################################################
                 if args.entropy and (args.N_entropy !=0):
-                    img_i = np.random.choice(10)
+                    img_i = np.random.choice(8)
                     target = stack_train_dataset.all_rgbs[img_i].to(device)
                     pose = stack_train_dataset.poses[img_i][:3, :4].to(device)
                     
@@ -377,7 +381,7 @@ def reconstruction(args):
               tensorf, 
               iteration, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
-              chunk=args.train_batch_size,
+              chunk=N_rand+args.N_entropy,
               N_samples=nSamples, 
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
@@ -390,8 +394,7 @@ def reconstruction(args):
               tensorf, 
               -1, 
               total_freq_reg_step=args.freq_reg_ratio*args.n_iters,
-              chunk=args.train_batch_size,
-              N_samples=nSamples, 
+              chunk=N_rand+args.N_entropy,
               white_bg = white_bg, 
               ndc_ray=ndc_ray, 
               device=device, 
@@ -429,6 +432,9 @@ def reconstruction(args):
 
         if args.entropy and args.info_nerf:
             entropy_ray_zvals_loss = fun_entropy_loss.ray_zvals(alpha_raw, acc_raw)
+            if torch.isnan(entropy_ray_zvals_loss):
+                print(alpha_raw.shape, acc_raw.shape)
+                exit()
             # history['entropy_ray_zvals'] = entropy_ray_zvals_loss.detach().numpy()
             
         if args.entropy_end_iter is not None:
@@ -466,17 +472,19 @@ def reconstruction(args):
             occ_reg_loss = args.occ_reg_loss_mult * occ_reg_loss
             total_loss += occ_reg_loss
 
+        den_loss_tv = 0
         if TV_weight_density > 0:
             TV_weight_density *= lr_factor
-            loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
-            total_loss = total_loss + loss_tv
-            summary_writer.add_scalar('train/reg_tv_density', loss_tv.detach().item(), global_step=iteration)
+            den_loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
+            total_loss += den_loss_tv
+            summary_writer.add_scalar('train/reg_tv_density', den_loss_tv.detach().item(), global_step=iteration)
 
+        app_loss_tv = 0
         if TV_weight_app > 0:
             TV_weight_app *= lr_factor
-            loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
-            total_loss = total_loss + loss_tv
-            summary_writer.add_scalar('train/reg_tv_app', loss_tv.detach().item(), global_step=iteration)
+            app_loss_tv = tensorf.TV_loss_app(tvreg)*TV_weight_app
+            total_loss = total_loss + app_loss_tv
+            summary_writer.add_scalar('train/reg_tv_app', app_loss_tv.detach().item(), global_step=iteration)
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -498,12 +506,14 @@ def reconstruction(args):
                 + f' total_loss = {total_loss:.6f}'
                 + f' train_psnr = {float(np.mean(PSNRs)):.2f}'
                 + f' test_psnr = {float(np.mean(PSNRs_test)):.2f}'   
-                + f' entropy = {args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss:.6f}'
-                + f' smoothing = {smoothing_lambda * smoothing_loss:.6f}'
                 + f' ortho = {Ortho_reg_weight*loss_reg:.6f}'
                 + f' L1 = {L1_reg_weight*loss_reg_L1:.6f}'
                 + f' occ = {args.occ_reg_loss_mult*occ_reg_loss:.6f}'
+                + f' app_loss = {app_loss_tv:.6f}'
+                + f' den_loss = {den_loss_tv:.6f}'
                 + f' mse = {loss:.6f}'
+                + f' entropy = {args.entropy_ray_zvals_lambda * entropy_ray_zvals_loss:.6f}'
+                + f' smoothing = {smoothing_lambda * smoothing_loss:.6f}'
             )
                 
             

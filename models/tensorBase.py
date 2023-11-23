@@ -48,7 +48,7 @@ def RGBRender(xyz_sampled, viewdirs, features):
 
     rgb = features
     return rgb"""
-
+ 
 class AlphaGridMask(torch.nn.Module):
     def __init__(self, device, aabb, alpha_volume):
         super(AlphaGridMask, self).__init__()
@@ -190,14 +190,18 @@ class NeRF_v3_2(torch.nn.Module):
         super(NeRF_v3_2, self).__init__()
         self.npospe = 3+2*pospe*3
         self.nview = 3+2*viewpe*3
-        self.nfea = 2*feape*inChanel*((feape*2+1)/(feape*2))
+        self.nfea = inChanel+2*feape*inChanel
         self.use_residual = use_residual
 
         self.pospe = pospe
         self.viewpe = viewpe
         self.feape = feape
+        
+        if feape == 0:
+            input_dim = (self.npospe) + (3+self.nview) + inChanel #
+        else:
+            input_dim = (self.nfea) + (3+self.nview) + 3 #
 
-        input_dim = (self.npospe) + (3+self.nview) + inChanel #
         D, W = netdepth, netwidth
 
         # get network width
@@ -252,11 +256,14 @@ class NeRF_v3_2(torch.nn.Module):
 
     def forward(self, pts, viewdirs, features, step, total_freq_reg_step):
 
-        f_mask = get_freq_reg_mask(features.shape[1], step, total_freq_reg_step, None, device=features.device).tile((features.shape[0], 1))                        
+        """f_mask = get_freq_reg_mask(features.shape[1], step, total_freq_reg_step, None, device=features.device).tile((features.shape[0], 1))                        
         features = features * f_mask
         v_mask = get_freq_reg_mask(viewdirs.shape[1], step, total_freq_reg_step, None, device=viewdirs.device).tile((viewdirs.shape[0], 1))                        
-        viewdirs = viewdirs * v_mask
-        indata = [features, viewdirs]
+        viewdirs = viewdirs * v_mask"""
+        if self.feape > 0:
+            indata = [pts, viewdirs]
+        else:
+            indata = [features, viewdirs]
 
         if self.pospe > 0:
             encode = positional_encoding(pts, self.pospe)
@@ -268,6 +275,14 @@ class NeRF_v3_2(torch.nn.Module):
             
         if self.viewpe > 0:
             encode = positional_encoding(viewdirs, self.viewpe)
+            if step == -1:
+                indata += [encode]
+            else:
+                mask = get_freq_reg_mask(encode.shape[1], step, total_freq_reg_step, None, device=encode.device).tile((encode.shape[0], 1))
+                indata += [encode*mask]
+        
+        if self.feape > 0:
+            encode = positional_encoding(features, self.feape)
             if step == -1:
                 indata += [encode]
             else:
@@ -345,7 +360,7 @@ class TensorBase(torch.nn.Module):
         elif shadingMode == 'MLP_Fea':
             self.renderModule = MLPRender_Fea(self.app_dim, view_pe, fea_pe, featureC).to(device)
         elif shadingMode == 'NERF_V3':
-            self.renderModule = NeRF_v3_2(self.app_dim, pospe=6, viewpe=6, feape=6, 
+            self.renderModule = NeRF_v3_2(self.app_dim, pospe=pos_pe, viewpe=view_pe, feape=fea_pe, 
                                           netwidth = self.args.netwidth, 
                                           netdepth = self.args.netdepth, 
                                           resmlp_act = self.args.resmlp_act, 
@@ -576,7 +591,6 @@ class TensorBase(torch.nn.Module):
 
             mask_filtered.append(mask_inbbox.cpu())
 
-        print(len(mask_filtered), len(mask_filtered[-1]), (all_rgbs.shape[:-1]))
         mask_filtered = torch.cat(mask_filtered).view(all_rgbs.shape[:-1])
 
         print(f'Ray filtering done! takes {time.time()-tt} s. ray mask ratio: {torch.sum(mask_filtered) / N}')
