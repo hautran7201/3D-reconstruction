@@ -50,7 +50,7 @@ def training_model(config_dir):
             formatted_path = os.path.join(*image_path.split('/'))
             file_path = formatted_path
 
-            file_name = formatted_path.split('\\')[-1].split('.')[0]
+            file_name = formatted_path.split('\\')[-1]
             image_list[file_name] = {
                 'camera_angles': camera_angles,
                 'transform_frames': transform_frames, 
@@ -67,8 +67,7 @@ def training_model(config_dir):
         train_image_choice = col2.selectbox(
             "List of images", 
             image_list.keys(), 
-            key='train_image_choice', 
-            index=None, 
+            key='train_image_choice',              
             label_visibility="collapsed"
         )
 
