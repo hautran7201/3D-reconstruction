@@ -13,7 +13,7 @@ def train_model():
     
     data_folder = os.path.join('data','data')
     os.makedirs(data_folder, exist_ok=True)    
-    config_folder = os.path.join('few_nerf','configs')
+    config_folder = os.path.join('data','config')
     os.makedirs(config_folder, exist_ok=True)
     obj_folder = os.path.join('data','object_data')
     os.makedirs(obj_folder, exist_ok=True)
