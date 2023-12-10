@@ -10,7 +10,7 @@ def obj_visualization(obj_dir):
 
     object_option = st.selectbox(
         "Select object", 
-        obj_dataset_list, 
+        obj_dataset_list + ['log'], 
         key='object_option', 
         index=None,
     )
@@ -20,6 +20,14 @@ def obj_visualization(obj_dir):
         pv.global_theme.show_scalar_bar = False
         plotter = pv.Plotter(window_size=[400,400])
 
+        if object_option == 'log':
+            obj_dir = 'few_nerf'
+            file_tail = '.ply'
+            file_head = 'final_'
+        else:
+            file_head = ''
+            file_tail = '.obj'
+
         object_name = st.selectbox(
             "Select object name", 
             os.listdir(os.path.join(obj_dir, object_option)), 
@@ -28,10 +36,9 @@ def obj_visualization(obj_dir):
         )
         
         if object_name:
-            obj_file = os.path.join(obj_dir, object_option, object_name, object_name+'.obj')                
+            obj_file = os.path.join(obj_dir, object_option, object_name, file_head+object_name+file_tail)                
             # mesh = pv.Cube(center=(0,0,0))
 
-            tex_file = os.path.join(obj_dir, object_option, object_name, 'material0.jpeg')                
             mesh = pv.read(obj_file)
             
             # st.title(os.path.splitext(os.path.basename(file_name))[0])    
@@ -41,7 +48,7 @@ def obj_visualization(obj_dir):
             # tex = pv.read_texture(tex_file)
 
             ## Add mesh to the plotter
-            plotter.add_mesh(mesh, scalars='myscalar', cmap='binary', line_width=1)
+            plotter.add_mesh(mesh, scalars='myscalar', cmap='gray', line_width=1)
 
             ## Final touches
             plotter.view_isometric()

@@ -17,6 +17,8 @@ def train_model():
     os.makedirs(config_folder, exist_ok=True)
     obj_folder = os.path.join('data','object_data')
     os.makedirs(obj_folder, exist_ok=True)
+    log_folder = os.path.join('few_nerf', 'log')
+    os.makedirs(obj_folder, exist_ok=True)
 
     with prepare_data:
         data_preparation(data_folder, config_folder)

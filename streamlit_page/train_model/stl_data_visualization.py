@@ -69,7 +69,7 @@ def data_visualization(data_dir):
 
                     # Get list of images in folder
                     col1.subheader("List of images")
-                    col1.write(image_list)
+                    # col1.write(image_list)
 
 
                     with col1:

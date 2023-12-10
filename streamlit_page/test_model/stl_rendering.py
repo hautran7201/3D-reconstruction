@@ -63,55 +63,10 @@ def rendering(log_dir):
                 args = config_parser(cmd_arguments)
                 
                 render_button = st.button(
-                    "Show back pic ⏭️",
+                    "Rendering",
                     key = 'render_button'
                 )
 
                 if render_button:
-                    render_test(args)
-
-                    # images_path = os.path.join(data_dir, dataset_option, dataset_obj_option, dataset_type_option)
-                    images_path = r'few_nerf\log\raw_8_0300\imgs_test_all'
-                    image_list = [os.path.join(images_path, iamge_name) for iamge_name in  os.listdir(images_path) if 'png' in iamge_name]
-                                        
-                    col1,col2 = st.columns(2)
-
-                    if 'counter' not in st.session_state: 
-                        st.session_state.counter = 0
-
-                    def showPhoto(next):
-                        col1.write(f"Index as a session_state attribute: {st.session_state.counter}")
-                        
-                        ## Increments the counter to get next photo
-                        if next:
-                            st.session_state.counter += 1
-                            if st.session_state.counter >= len(image_list):
-                                st.session_state.counter = 0
-                        else:
-                            st.session_state.counter -= 1
-                            if st.session_state.counter < 0:
-                                st.session_state.counter = len(image_list)-1
-
-                        # Select photo a send it to button
-                        photo = image_list[st.session_state.counter]
-                        col2.image(photo,caption=photo)
-
-                    # Get list of images in folder
-                    col1.subheader("List of images in folder")
-                    col1.write(image_list)
-
-
-                    with col1:
-                        bt_col1, bt_col2 = st.columns(2)
-                        show_back_btn = bt_col1.button(
-                            "Show back pic ⏭️",
-                            on_click=showPhoto,
-                            args=([False]),
-                            key = 'show_back_btn'
-                        )
-                        show_next_btn = bt_col2.button(
-                            "Show next pic ⏭️",
-                            on_click=showPhoto,
-                            args=([True]),
-                            key = 'show_next_btn'
-                        )
+                    with st.spinner('Wait for it...'):
+                        render_test(args)
