@@ -43,6 +43,10 @@ def training_model(config_dir):
             camera_angle_y = 0
             if 'camera_angle_y' in meta:
                 camera_angle_y = meta['camera_angle_y']
+            if camera_angle_x == 0:
+                camera_angle_x = camera_angle_y
+            if camera_angle_y == 0:
+                camera_angle_y = camera_angle_x
             camera_angles = [camera_angle_x, camera_angle_y]
 
             file_path = frame['file_path'].split('.')[-1]

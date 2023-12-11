@@ -172,6 +172,14 @@ def data_preparation(data_dir, config_dir):
             step=1, 
             key='N_voxel_init_box', 
         )
+        downsample_box = st.number_input(
+            'Downsample image', 
+            min_value=0, 
+            value=2,
+            step=1, 
+            key='downsample_box', 
+        )
+
     with N_voxel_final_col:
         N_voxel_final_box = st.number_input(
             'Number voxel final', 
@@ -456,7 +464,7 @@ N_voxel_init            = {N_voxel_init_box**3} # 128**3 2097156
 N_voxel_final           = {N_voxel_final_box**3} # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]
 update_AlphaMask_list   = [2000,4000]
-downsample_train        = 2
+downsample_train        = {downsample_box}
 
 
 #------ Model name ------
