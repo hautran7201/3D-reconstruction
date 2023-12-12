@@ -1,20 +1,17 @@
-# TensoRF
-## [Project page](https://apchenstu.github.io/TensoRF/) |  [Paper](https://arxiv.org/abs/2203.09517)
-This repository contains a pytorch implementation for the paper: [TensoRF: Tensorial Radiance Fields](https://arxiv.org/abs/2203.09517). Our work present a novel approach to model and reconstruct radiance fields, which achieves super
-**fast** training process, **compact** memory footprint and **state-of-the-art** rendering quality.<br><br>
+# Few TensoRF
 
+This repository includes a PyTorch implementation for 3D object reconstruction using only a few input images, drawing inspiration from the TensoRF and FreeNeRF papers. Our contribution involves optimizing the Few Shots structures for increased speed and accuracy during the refactoring process.
 
-https://user-images.githubusercontent.com/16453770/158920837-3fafaa17-6ed9-4414-a0b1-a80dc9e10301.mp4
 ## Installation
 
 #### Tested on Ubuntu 20.04 + Pytorch 1.10.1 
 
 Install environment:
 ```
-conda create -n TensoRF python=3.8
-conda activate TensoRF
-pip install torch torchvision
-pip install tqdm scikit-image opencv-python configargparse lpips imageio-ffmpeg kornia lpips tensorboard
+!pip install tqdm scikit-image opencv-python configargparse lpips imageio-ffmpeg kornia lpips tensorboard
+!pip install plyfile
+!pip install --upgrade tensorflow==2.9.2
+!pip install ipython-autotime
 ```
 
 
@@ -54,15 +51,16 @@ dimension;
 
 More options refer to the `opt.py`. 
 
-### For pretrained checkpoints and results please see:
-[https://1drv.ms/u/s!Ard0t_p4QWIMgQ2qSEAs7MUk8hVw?e=dc6hBm](https://1drv.ms/u/s!Ard0t_p4QWIMgQ2qSEAs7MUk8hVw?e=dc6hBm)
+## Training
 
-
+```
+ython {train_path} --config {config} --render_test 1
+```
 
 ## Rendering
 
 ```
-python train.py --config configs/lego.txt --ckpt path/to/your/checkpoint --render_only 1 --render_test 1 
+python {train_path} --config {config} --render_only 1 --render_test 1 --render_train 1 --ckpt {ckpt_path}
 ```
 
 You can just simply pass `--render_only 1` and `--ckpt path/to/your/checkpoint` to render images from a pre-trained
@@ -72,7 +70,7 @@ The rendering results are located in your checkpoint folder.
 ## Extracting mesh
 You can also export the mesh by passing `--export_mesh 1`:
 ```
-python train.py --config configs/lego.txt --ckpt path/to/your/checkpoint --export_mesh 1
+python {train_path}  --export_mesh 1 --ckpt {ckpt_path}
 ```
 Note: Please re-train the model and don't use the pretrained checkpoints provided by us for mesh extraction, 
 because some render parameters has changed.
@@ -86,12 +84,6 @@ We provide two options for training on your own image set:
     
 
 ## Citation
-If you find our code or paper helps, please consider citing:
-```
-@article{tensorf,
-  title={TensoRF: Tensorial Radiance Fields},
-  author={Chen, Anpei and Xu, Zexiang and Geiger, Andreas and Yu, Jingyi and Su, Hao},
-  journal={arXiv preprint arXiv:2203.09517},
-  year={2022}
-}
-```
+Source code reference from: 
+[TensoRF](https://github.com/apchenstu/TensoRF)
+[FreeNeRF](https://github.com/Jiawei-Yang/FreeNeRF/tree/main)
