@@ -55,9 +55,11 @@ def config_parser(cmd=None):
                         help='loss weight')
     parser.add_argument("--TV_weight_app", type=float, default=0.0,
                         help='loss weight')
-    # Regularization
+    # Free Regularization
     parser.add_argument("--free_reg", action='store_true',
                         help='using entropy ray loss')
+    parser.add_argument("--free_decomp", action='store_true',
+                        help='using free mask in decomposition part')                        
     parser.add_argument("--freq_reg_ratio", type=float, default=1,
                         help='encoding reg ratio')
     parser.add_argument("--max_vis_freq_ratio", type=float, default=0.0,

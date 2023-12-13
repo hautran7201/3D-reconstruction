@@ -352,14 +352,15 @@ def reconstruction(args):
 
         if args.free_reg:
             free_maskes = get_free_mask(
-              pos_bl      =tensorf.pos_bit_length, 
-              view_bl     =tensorf.view_bit_length, 
-              fea_bl      =tensorf.fea_bit_length, 
-              den_bl      =tensorf.density_bit_length,
-              app_bl      =tensorf.app_bit_length,
-              step        =iteration, 
-              total_step  =args.n_iters, 
-              device      =device
+              pos_bl              = tensorf.pos_bit_length, 
+              view_bl             = tensorf.view_bit_length, 
+              fea_bl              = tensorf.fea_bit_length, 
+              den_bl              = tensorf.density_bit_length,
+              app_bl              = tensorf.app_bit_length,
+              using_decomp_mask   = args.free_decomp,
+              step                = iteration, 
+              total_step          = args.n_iters, 
+              device              = device
             )
         else:
             free_maskes = get_free_mask()
