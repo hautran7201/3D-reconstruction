@@ -7,14 +7,14 @@ basedir = ./log/human
 #------ Number images ------
 train_idxs    = [0,6,12,18,24,30,36,42]
 val_idxs      = [0,2,4,6,8,10,12,14,16,18,20]
-test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
+# test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
 
 N_train_imgs  = 8
 N_test_imgs   = 10
 
 
 #------ Config parameters ------
-n_iters = 3000
+n_iters = 15000
 batch_size = 1024
 step_ratio = 0.5
 
@@ -29,7 +29,7 @@ downsample_train        = 2
 
 
 #------ Model name ------
-model_name    = TensorCP # TensorVMSplit
+model_name    = TensorVMSplit
 shadingMode   = MLP
 fea2denseAct  = softplus
 overwrt       = True 
@@ -43,8 +43,8 @@ save_ckpt_every   = [15000, 30000, 50000]
 
 
 #------ Decomposition ------
-n_lamb_sigma = [16] # [16,16,16]
-n_lamb_sh = [48] # [48,48,48]
+n_lamb_sigma = [16,16,16]
+n_lamb_sh = [48,48,48]
 
 
 #------ Feature config ------
