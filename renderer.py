@@ -1,4 +1,5 @@
 import torch,os,imageio,sys
+import numpy as np
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 from dataLoader.ray_utils import get_rays
@@ -194,12 +195,14 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         plt.close()
 
 @torch.no_grad()
-def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
+def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
-    PSNRs, rgb_maps, depth_maps = [], [], []
+    PSNRs, gt_rgb_maps, rgb_maps, depth_maps = [], [], [], []
     ssims,l_alex,l_vgg=[],[],[]
     os.makedirs(savePath, exist_ok=True)
     os.makedirs(savePath+"/rgbd", exist_ok=True)
+    os.makedirs(savePath+"/prediction", exist_ok=True)
+    os.makedirs(savePath+"/ground_truth", exist_ok=True)
 
     try:
         tqdm._instances.clear()
@@ -214,8 +217,16 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, _, depth_map, _, _, _ = renderer(rays, tensorf, chunk=4096, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
+
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
         rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
@@ -235,11 +246,14 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
                 l_vgg.append(l_v)
 
         rgb_map = (rgb_map.numpy() * 255).astype('uint8')
-        # rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
+        gt_rgb_map = (gt_rgb.numpy() * 255).astype('uint8')
+
         rgb_maps.append(rgb_map)
+        gt_rgb_maps.append(gt_rgb_map)
         depth_maps.append(depth_map)
         if savePath is not None:
-            imageio.imwrite(f'{savePath}/{prtx}{idx:03d}.png', rgb_map)
+            imageio.imwrite(f'{savePath}/prediction/{prtx}{idx:03d}.png', rgb_map)
+            imageio.imwrite(f'{savePath}/ground_truth/{prtx}{idx:03d}.png', gt_rgb_map)
             rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
             imageio.imwrite(f'{savePath}/rgbd/{prtx}{idx:03d}.png', rgb_map)
 
