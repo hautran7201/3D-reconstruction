@@ -8,20 +8,21 @@ from PIL import Image
 
 mse2psnr = lambda x: -10.0 * torch.log(x) / torch.log(torch.Tensor([10.0]))
 
-def get_freq_reg_mask(pos_enc_lengths, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
+def get_freq_reg_mask(pos_enc_lengths, current_iter, total_reg_iter, ratio, max_visible=None, type='submission', device='cpu'):
 
     freq_maskes = []
     for pos_enc_length in pos_enc_lengths:
         if max_visible is None:
           # default FreeNeRF
-          dv = 3
+          dv = 4
           if current_iter < total_reg_iter:
             freq_mask = torch.zeros(pos_enc_length).to(device)  # all invisible
+            pos_enc_length = pos_enc_length * ratio
             ptr = pos_enc_length / dv * current_iter / total_reg_iter + 1 
             ptr = ptr if ptr < pos_enc_length / dv else pos_enc_length / dv
             int_ptr = int(ptr)
             freq_mask[: int_ptr * dv] = 1.0  # assign the integer part
-            freq_mask[int_ptr * dv : int_ptr * dv + 3] = (ptr - int_ptr)  # assign the fractional part
+            freq_mask[int_ptr * dv : int_ptr * dv + dv] = (ptr - int_ptr)  # assign the fractional part
             return torch.clamp(freq_mask, 1e-8, 1 - 1e-8)
           else:
             return torch.ones(pos_enc_length).to(device)
@@ -33,7 +34,7 @@ def get_freq_reg_mask(pos_enc_lengths, current_iter, total_reg_iter, max_visible
 
     return freq_maskes
 
-def get_free_mask(pos_bl=0, view_bl=0, fea_bl=0, den_bl=0, app_bl=0, step=-1, total_step=1, using_decomp_mask=True, max_visible=None, device='cpu'):
+def get_free_mask(pos_bl=[0], view_bl=[0], fea_bl=[0], den_bl=[], app_bl=[], step=-1, total_step=1, ratio=1, using_decomp_mask=True, max_visible=None, device='cpu'):
   pos_mask = None
   view_mask = None
   fea_mask = None
@@ -41,16 +42,16 @@ def get_free_mask(pos_bl=0, view_bl=0, fea_bl=0, den_bl=0, app_bl=0, step=-1, to
   app_mask = None
 
   if pos_bl[0] > 0:
-      pos_mask = get_freq_reg_mask(pos_bl, step, total_step, max_visible=max_visible, type='submission', device=device)[0]
+      pos_mask = get_freq_reg_mask(pos_bl, step, total_step, ratio=ratio, max_visible=max_visible, type='submission', device=device)[0]
   if view_bl[0] > 0:
-      view_mask = get_freq_reg_mask(view_bl, step, total_step, max_visible=max_visible, type='submission', device=device)[0]
+      view_mask = get_freq_reg_mask(view_bl, step, total_step, ratio=ratio, max_visible=max_visible, type='submission', device=device)[0]
   if fea_bl[0] > 0:
-      fea_mask = get_freq_reg_mask(fea_bl, step, total_step, max_visible=max_visible, type='submission', device=device)[0]
+      fea_mask = get_freq_reg_mask(fea_bl, step, total_step, ratio=ratio, max_visible=max_visible, type='submission', device=device)[0]
   if using_decomp_mask:
       if len(den_bl) > 0:
-          den_mask = get_freq_reg_mask(den_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+          den_mask = get_freq_reg_mask(den_bl, step, total_step, ratio=ratio, max_visible=max_visible, type='submission', device=device)
       if len(app_bl) > 0:
-          app_mask = get_freq_reg_mask(app_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+          app_mask = get_freq_reg_mask(app_bl, step, total_step, ratio=ratio, max_visible=max_visible, type='submission', device=device)
   else: 
       den_mask = None
       app_mask = None

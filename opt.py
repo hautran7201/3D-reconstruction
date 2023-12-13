@@ -62,6 +62,7 @@ def config_parser(cmd=None):
                         help='using free mask in decomposition part')                        
     parser.add_argument("--freq_reg_ratio", type=float, default=1,
                         help='encoding reg ratio')
+    parser.add_argument("--mask_ratio_list", type=float, action="append", default=[1])
     parser.add_argument("--max_vis_freq_ratio", type=float, default=0.0,
                         help='encoding reg')                        
     # Occ

@@ -10,7 +10,7 @@ val_idxs      = [0,2,4,6,8,10,12,14,16,18,20]
 # test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
 
 N_train_imgs  = 8
-N_test_imgs   = 10
+N_test_imgs   = 0
 
 
 #------ Config parameters ------
@@ -48,15 +48,16 @@ n_lamb_sh = [48,48,48]
 
 
 #------ Feature config ------
-pos_pe  = 2
-view_pe = 2
+pos_pe  = 8
+view_pe = 8
 fea_pe = 2
 data_dim_color = 27
 
 
 #------ Frequence reg ------
-free_reg        = True 
+free_reg        = False 
 free_decomp     = True
+mask_ratio_list = [0.2, 0.3, 0.45, 0.7, 0.95]
 freq_reg_ratio  = 0.8
 
 

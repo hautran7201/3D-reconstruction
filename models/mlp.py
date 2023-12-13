@@ -110,7 +110,7 @@ class MLPRender(torch.nn.Module):
     def __init__(self, inChanel, viewpe=6, pospe=6, feape=6, featureC=128):
         super(MLPRender, self).__init__()
 
-        self.in_mlpC = (2*viewpe*3) + (2*viewpe*3) + (2*feape*inChanel) + inChanel + 3
+        self.in_mlpC = (2*pospe*3) + (2*viewpe*3) + (2*feape*inChanel) + inChanel + 3
         self.viewpe = viewpe
         self.pospe = pospe
         self.feape = feape

@@ -217,7 +217,7 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+        rgb_map, _, depth_map, _, _, _ = renderer(
             rays,
             tensorf,
             chunk=chunk,

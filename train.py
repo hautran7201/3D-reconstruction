@@ -226,6 +226,7 @@ def reconstruction(args):
     update_AlphaMask_list = args.update_AlphaMask_list
     n_lamb_sigma = args.n_lamb_sigma
     n_lamb_sh = args.n_lamb_sh
+    mask_ratio_list = args.mask_ratio_list
 
     if args.add_timestamp:
         logfolder = f'{args.basedir}/{args.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
@@ -314,7 +315,7 @@ def reconstruction(args):
     ).tolist()[1:]
 
     torch.cuda.empty_cache()
-    PSNRs, PSNRs_train, PSNRs_test = [],[],[0]
+    PSNRs, PSNRs_train, PSNRs_test = [],[0],[0]
 
     allrays, allrgbs = train_dataset.all_rays, train_dataset.all_rgbs
     if not args.ndc_ray:
@@ -350,6 +351,8 @@ def reconstruction(args):
         ray_idx = trainingSampler.nextids()
         rays_train, rgb_train = allrays[ray_idx], allrgbs[ray_idx].to(device)
 
+
+        ratio = mask_ratio_list[0]
         if args.free_reg:
             free_maskes = get_free_mask(
               pos_bl              = tensorf.pos_bit_length, 
@@ -360,6 +363,7 @@ def reconstruction(args):
               using_decomp_mask   = args.free_decomp,
               step                = iteration, 
               total_step          = args.n_iters, 
+              ratio               = ratio,
               device              = device
             )
         else:
@@ -471,13 +475,12 @@ def reconstruction(args):
             )
             PSNRs = []
 
-        if iteration % args.train_vis_every == args.train_vis_every - 1 and args.N_vis != 0:
+        if iteration % args.train_vis_every == 0:
             if iteration % args.vis_every == 0:
                 PSNRs_test = PSNRs_calculate(
                   args,
                   tensorf,
                   test_dataset,
-                  free_maskes,
                   renderer, 
                   chunk=args.batch_size,
                   N_samples=nSamples,
@@ -527,11 +530,15 @@ def reconstruction(args):
                 )
 
         if iteration in upsamp_list:
+
+            if len(upsamp_list) == len(mask_ratio_list):
+                ratio = mask_ratio_list[upsamp_list.index(iteration)]
+
             n_voxels = N_voxel_list.pop(0)
             reso_cur = N_to_reso(n_voxels, tensorf.aabb)
             nSamples = min(
                 args.nSamples, cal_n_samples(reso_cur, args.step_ratio)
-            )
+            )            
             tensorf.upsample_volume_grid(reso_cur)
 
             if args.lr_upsample_reset:

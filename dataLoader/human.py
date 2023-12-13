@@ -28,7 +28,7 @@ class HumanDataset(Dataset):
         self.enhance = enhance
         self.define_transforms()
 
-        self.scene_bbox = torch.tensor([[-1., -1., -1.], [1., 1., 1.]])
+        self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
         self.blender2opencv = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.downsample=downsample
         self.read_meta()
