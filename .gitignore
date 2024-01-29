@@ -1,0 +1,4 @@
+log
+models/diffusion_checkpoint
+extrinsic2pyramid
+**__pycache__**

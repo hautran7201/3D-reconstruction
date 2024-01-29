@@ -1,0 +1,85 @@
+#------ Folder ------ 
+dataset_name = blender
+datadir = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
+expname = free_lego_882_27_nerfacc
+basedir = ./log
+
+#------ Number images ------
+train_idxs    = [0,6,12,18,24,30,36,42]
+val_idxs      = [0,2,4,6,8,10,12,14,16,18,20]
+test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
+
+N_train_imgs  = 8
+N_test_imgs   = 10
+
+
+#------ Config parameters ------
+n_iters = 3000
+batch_size = 1024
+step_ratio = 0.5
+
+
+#------ Resolution ------
+occ_grid_reso           = 0
+N_voxel_init            = 2097156 # 128**3 2097156
+N_voxel_final           = 27000000 # 300**3
+upsamp_list             = [2000,3000,4000,5500,7000]
+update_AlphaMask_list   = [2000,4000]
+downsample_train        = 2
+
+
+#------ Model name ------
+model_name    = TensorCP # TensorVMSplit
+shadingMode   = MLP
+fea2denseAct  = softplus
+overwrt       = True 
+
+
+#------ Test ------
+N_vis             = 5
+vis_every         = 2000
+train_vis_every   = 2000
+save_ckpt_every   = [15000, 30000, 50000]
+
+
+#------ Decomposition ------
+n_lamb_sigma = [16] # [16,16,16]
+n_lamb_sh = [48] # [48,48,48]
+
+
+#------ Feature config ------
+pos_pe  = 2
+view_pe = 2
+fea_pe = 2
+data_dim_color = 27
+
+
+#------ Frequence reg ------
+free_reg        = True 
+freq_reg_ratio  = 0.8
+
+
+#------ Occlusion reg ------
+occ_reg_loss_mult   = 0.1
+occ_reg_range       = 20
+occ_wb_range        = 20
+occ_wb_prior        = False
+
+
+#------ Reg ------
+L1_weight_inital    = 8e-5
+L1_weight_rest      = 4e-5
+Ortho_weight        = 0.01
+TV_weight_density   = 0.01
+TV_weight_app       = 0.01 
+rm_weight_mask_thre = 1e-4
+alpha_mask_thre     = 0.0001
+
+
+## please uncomment following configuration if hope to training on cp model
+#model_name = TensorCP
+#n_lamb_sigma = [96]
+#n_lamb_sh = [288]
+#N_voxel_final = 125000000 # 500**3
+#L1_weight_inital = 1e-5
+#L1_weight_rest = 1e-5
