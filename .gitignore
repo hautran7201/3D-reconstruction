@@ -1,4 +1,6 @@
-log
-models/diffusion_checkpoint
+/log
+/models/diffusion_checkpoint/rgbd-patch-diffusion.pt
+/condacolab_install.log
+*/script.sh
 extrinsic2pyramid
 **__pycache__**
