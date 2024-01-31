@@ -1,8 +1,8 @@
 #------ Folder ------ 
 dataset_name = test_diffusion  # test_diffusion
-datadir = /content/drive/MyDrive/Human2.0/NeRF_Data/nerf_synthetic/lego
+datadir = /content/drive/MyDrive/AI_dataset/nerf_synthetic/lego
 expname = lego
-basedir = /content/drive/MyDrive/CTPJ/logs
+basedir = /content/drive/MyDrive/FPT_University/log
 
 #------ Number images ------
 train_idxs    = [0,6,12,18,24,30,36,42]
@@ -30,7 +30,7 @@ downsample_train        = 2
 
 #------ Model name ------
 model_name    = TensorVMSplit
-shadingMode   = Wire # MLPRender
+shadingMode   = Siren # MLPRender
 fea2denseAct  = softplus
 overwrt       = True 
 
@@ -48,7 +48,7 @@ n_lamb_sh = [48,48,48]
 
 
 #------ Feature config ------
-pos_pe  = 16
+pos_pe  = 8
 view_pe = 2
 fea_pe = 2
 data_dim_color = 27

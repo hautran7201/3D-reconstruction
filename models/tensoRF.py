@@ -251,7 +251,6 @@ class TensorVMSplit(TensorBase):
 
         plane_coef_point,line_coef_point = [],[]
         for idx_plane in range(len(self.app_plane)):
-            print('\n================================')
             if mask == None:
                 plane_coef_point.append(F.grid_sample(self.app_plane[idx_plane], coordinate_plane[[idx_plane]],
                                                     align_corners=True).view(-1, *xyz_sampled.shape[:1]))

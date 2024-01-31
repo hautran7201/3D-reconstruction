@@ -116,23 +116,42 @@ class TensorBase(torch.nn.Module):
                 featureC
             ).to(device)
         elif shadingMode == 'Siren':
-            self.renderModule = Siren(
-                in_features=3+3+self.app_dim, 
-                hidden_features=featureC, 
-                hidden_layers=4, 
-                out_features=3,
-                outermost_linear=True
+            self.renderModule = SirenNeRF(
+                D = 4, 
+                skips = [2], 
+                W = 256,
+                input_ch_appearance = 3+27,
+                net_branch_appearance = True,
+
+                # siren related
+                sigma_mul = 10.,
+                rgb_mul = 1.,
+                first_layer_w0 = 30.,
+                following_layers_w0 = 1.,
             ).to(device)
         elif shadingMode == 'Wire':
             self.renderModule = Wire(
                 in_features=3+3+self.app_dim, 
                 hidden_features=128, 
                 hidden_layers=3, 
-                out_features=3
+                out_features=3,
+                first_omega_0=40,
+                hidden_omega_0=40,
+                scale=40
+
             ).to(device)
         else:
             print("Unrecognized shading module")
             exit()
+
+        """elif shadingMode == 'Siren':
+            self.renderModule = Siren(
+                in_features=3+3+self.app_dim, 
+                hidden_features=featureC, 
+                hidden_layers=4, 
+                out_features=3,
+                outermost_linear=True
+            ).to(device)"""
 
         print("pos_pe", pos_pe, "view_pe", view_pe, "fea_pe", fea_pe)
         print(self.renderModule)
@@ -411,6 +430,7 @@ class TensorBase(torch.nn.Module):
 
         acc_map = torch.sum(weight, -1)
         rgb_map = torch.sum(weight[..., None] * rgb, -2)
+        rgb_map_1 = rgb_map
 
         if white_bg: #  or (is_train and torch.rand((1,))<0.5)
             rgb_map = rgb_map + (1. - acc_map[..., None])
@@ -420,15 +440,14 @@ class TensorBase(torch.nn.Module):
         with torch.no_grad():
             depth_map = torch.sum(weight * z_vals, -1) #  / acc_map
             depth_map = depth_map + (1. - acc_map)
-            if torch.isnan(depth_map).any().item():
+            if torch.isnan(rgb_map).any().item():
                 print()
-                print(torch.isnan(depth_map).any().item())
-                print(torch.isnan(weight).any().item())
-                print(torch.isnan(sigma).any().item())
-                print(torch.isnan(dists).any().item())
-                print(torch.isnan(z_vals).any().item())
-                print(torch.isnan(weight * z_vals).any().item())
-                print(torch.isnan(acc_map).any().item())
+                print(torch.isnan(rgb_map).any().item())
+                print(torch.isnan(rgb_map_1).any().item())
+                print(torch.isnan(weight[..., None]).any().item())
+                print(torch.isnan(rgb).any().item())
+                print(torch.min(rgb_map))
+                print(torch.max(rgb_map))
                 print('have NAN')
                 print()
                 

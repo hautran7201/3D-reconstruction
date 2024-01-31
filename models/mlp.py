@@ -1,7 +1,11 @@
+import math 
 import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from typing import List, Optional, Union
 
 from .sh import eval_sh_bases
 from collections import OrderedDict
@@ -298,7 +302,7 @@ class Wire(nn.Module):
 
         return output
 
-class SineLayer(nn.Module):
+"""class SineLayer(nn.Module):
     # See paper sec. 3.2, final paragraph, and supplement Sec. 1.5 for discussion of omega_0.
     
     # If is_first=True, omega_0 is a frequency factor which simply multiplies the activations before the 
@@ -382,5 +386,156 @@ class Siren(nn.Module):
         # data = data.clone().detach().requires_grad_(True) # allows to take derivative w.r.t. input
         rgb = self.net(data)
         # rgb = torch.sigmoid(rgb)
-        return rgb  
+        return rgb  """
+
+class Sine(nn.Module):
+    def __init__(self, w0=30.):
+        super().__init__()
+        self.w0 = w0
+
+    def forward(self, x):
+        return torch.sin(self.w0 * x)
+
+
+class SirenLayer(nn.Module):
+    def __init__(self, input_dim, hidden_dim, use_bias=True, w0=1., is_first=False):
+        super().__init__()
+        self.layer = nn.Linear(input_dim, hidden_dim, bias=use_bias)
+        self.activation = Sine(w0)
+        self.is_first = is_first
+        self.input_dim = input_dim
+        self.w0 = w0
+        self.c = 6
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        with torch.no_grad():
+            dim = self.input_dim
+            w_std = (1 / dim) if self.is_first else (math.sqrt(self.c / dim) / self.w0)
+            self.layer.weight.uniform_(-w_std, w_std)
+            if self.layer.bias is not None:
+                self.layer.bias.uniform_(-w_std, w_std)
+
+    def forward(self, x):
+        out = self.layer(x) 
+        out = self.activation(out)
+        return out
+
+class SirenNeRF(nn.Module):
+    """
+    SIREN-ized NeRF
+    """
+    def __init__(
+        self,
+        D: int = 8, skips: List = [4], W: int = 256,
+        input_ch_appearance: int = 32,
+        net_branch_appearance: bool = True,
+        # siren related
+        sigma_mul: float = 10.,
+        rgb_mul: float = 1.,
+        first_layer_w0: float = 30.,
+        following_layers_w0: float = 1.,
+        **not_used_kwargs
+    ):
+        super().__init__()
+        self.skips = skips
+        self.net_branch_appearance = net_branch_appearance
+        self.sigma_mul = sigma_mul
+        self.rgb_mul = rgb_mul
+
+        input_ch_pts = 3    # fixed. do not change.
+        use_bias = True     # fixed. do not change.
+        # first_layer_w0 = 30.
+        # following_layers_w0 = 1.
+
+        base_layers = [SirenLayer(input_ch_pts, W, use_bias=use_bias, w0=first_layer_w0, is_first=True)]
+        for _ in range(D-1):
+            base_layers.append(SirenLayer(W, W, use_bias=use_bias, w0=following_layers_w0))
+        dim = W
+        self.base_layers = nn.Sequential(*base_layers)
+
+        if self.net_branch_appearance:
+            sigma_layers = [nn.Linear(dim, 1, bias=use_bias), ]
+            self.sigma_layers = nn.Sequential(*sigma_layers)
+
+            base_remap_layers = [nn.Linear(dim, W, bias=use_bias), ]
+            self.base_remap_layers = nn.Sequential(*base_remap_layers)
+
+            rgb_layers = [
+                SirenLayer(W + input_ch_appearance, W // 2, use_bias=use_bias, w0=following_layers_w0),
+            ] + [
+                nn.Linear(W // 2, 3, bias=use_bias)]
+            self.rgb_layers = nn.Sequential(*rgb_layers)
+        else:
+            output_layers = [nn.Linear(dim, 4, bias=use_bias), ]
+            self.output_linear = nn.Sequential(*output_layers)
+
+    def forward(
+            self,
+            input_pts: torch.Tensor,
+            input_views: Optional[torch.Tensor] = None,
+            input_features: Optional[torch.Tensor] = None,
+            mask = None
+        ):
+        """
+        input_pts:          [(B), N, 3]
+        input_views:        [(B), N, any]
+        """
+        
+        if input_views is None:
+            shape = list(input_pts.shape)
+            shape[-1] = 0
+            input_views = input_pts.new_empty(shape)
+
+        base = input_pts
+        base = self.base_layers(input_pts)
+
+        if self.net_branch_appearance:
+            sigma: torch.Tensor = self.sigma_layers(base)
+            base_remap = self.base_remap_layers(base)
+            rgb = torch.cat((base_remap, input_views, input_features), dim=-1)
+            rgb = self.rgb_layers(rgb)
+        else:
+            outputs = self.output_linear(base)
+            rgb = outputs[..., :3]
+            sigma = outputs[..., 3:]
+
+        # only multiply on the positive side, since a large minus sigma is meaningless.
+        # sigma = torch.where(sigma > 0, sigma * self.sigma_mul, sigma)
+        
+        # rgb values are normalized to [0, 1]
+        rgb = torch.sigmoid_(rgb * self.rgb_mul)
+
+        # ret = OrderedDict([('rgb', rgb), ('sigma', sigma.squeeze(-1))])
+        return rgb     
+
+class DoubleNeRF(nn.Module):
+    def __init__(self,
+                 base_cls: Union[NeRF, SirenNeRF],
+                 net_kwargs: dict,
+                 use_fine_model=False,
+                 fine_kwargs: Optional[dict] = None,
+                 **kwargs):
+        super().__init__()
+
+        self.use_fine_model = use_fine_model
+
+        self.coarse_model = base_cls(**net_kwargs, **kwargs)
+        if use_fine_model:
+            assert fine_kwargs is not None
+            self.fine_model = base_cls(**fine_kwargs, **kwargs)
+
+    def forward(self, *args, is_coarse: bool = True, **kwargs):
+        if is_coarse:
+            return self.coarse_model(*args, **kwargs)
+        else:
+            assert self.use_fine_model
+            return self.fine_model(*args, **kwargs)
+
+    def query_sigma(self, *args, is_coarse: bool = True, **kwargs):
+        if is_coarse:
+            return self.coarse_model.query_sigma(*args, **kwargs,)
+        else:
+            assert self.use_fine_model
+            return self.fine_model.query_sigma(*args, **kwargs,)
         
