@@ -2,9 +2,11 @@ import torch,os,imageio,sys
 import numpy as np
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
+
 from dataLoader.ray_utils import get_rays
-from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
-from utils import *
+from models.tensoRF import TensorVM, TensorCP, TensorVMSplit
+from utils import visualize_depth_numpy
+from loss import rgb_ssim, rgb_lpips
 from dataLoader.ray_utils import ndc_rays_blender
 
 
@@ -36,54 +38,6 @@ def create_gif(path_to_dir, name_gif):
     else:
         return
 
-@torch.no_grad()
-def PSNRs_calculate(args, tensorf, dataset, renderer, chunk=4096, N_samples=-1,
-               white_bg=False, ndc_ray=False, compute_extra_metrics=False, device='cuda'):
-    PSNRs, rgb_maps, depth_maps = [], [], []
-    ssims,l_alex,l_vgg=[],[],[]
-
-    try:
-        tqdm._instances.clear()
-    except Exception:
-        pass
-
-    near_far = dataset.near_far
-    img_eval_interval = 1 
-    idxs = list(range(0, dataset.all_rays.shape[0], img_eval_interval))
-    for idx, samples in tqdm(enumerate(dataset.all_rays[0::img_eval_interval]), file=sys.stdout):
-
-        W, H = dataset.img_wh
-        rays = samples.to(device).view(-1,samples.shape[-1])
-
-        rgb_map, _, depth_map, _, _, _ = renderer(
-            rays,
-            tensorf,
-            chunk=chunk,
-            N_samples=N_samples,
-            ndc_ray=ndc_ray,
-            white_bg=white_bg,
-            device=device,
-        )
-        
-        rgb_map = rgb_map.clamp(0.0, 1.0)
-
-        rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
-
-        depth_map, _ = visualize_depth_numpy(depth_map.numpy(),near_far)
-        if len(dataset.all_rgbs):
-            gt_rgb = dataset.all_rgbs[idxs[idx]].view(H, W, 3)
-            loss = torch.mean((rgb_map - gt_rgb) ** 2)
-            PSNRs.append(-10.0 * np.log(loss.item()) / np.log(10.0))
-
-            if compute_extra_metrics:
-                ssim = rgb_ssim(rgb_map, gt_rgb, 1)
-                l_a = rgb_lpips(gt_rgb.numpy(), rgb_map.numpy(), 'alex', tensorf.device)
-                l_v = rgb_lpips(gt_rgb.numpy(), rgb_map.numpy(), 'vgg', tensorf.device)
-                ssims.append(ssim)
-                l_alex.append(l_a)
-                l_vgg.append(l_v)
-
-    return PSNRs
 
 @torch.no_grad()
 def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, step, logs, savePath=None, chunk=4096, N_samples=-1,
@@ -121,11 +75,8 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         )
 
         rgb_map             = rgb_map.clamp(0.0, 1.0)
-
         rgb_map, depth_map   = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
-
         train_depth_map, _  = visualize_depth_numpy(depth_map.numpy(),near_far)
-
         train_rgb_map       = (rgb_map.numpy() * 255).astype('uint8')
 
 

@@ -1,0 +1,94 @@
+log:
+    #------ Folder ------ 
+    expname: free_lego_882_27_nerfacc
+    basedir: ./log
+    add_timestamp: true
+    overwrt: true
+
+dataset:
+    dataset_name: blender
+    datadir: /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
+    downsample_train: 2
+
+    #------ Number images ------
+    train_idxs: [0,6,12,18,24,30,36,42]
+    val_idxs: [0,2,4,6,8,10,12,14,16,18,20]
+    test_idxs: [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
+
+    N_train_imgs: 8
+    N_test_imgs: 10
+
+model:
+    model_name: TensorVMSplit # [TensorVMSplit, TensorCP]
+    shadingMode: MLP
+    fea2denseAct: softplus
+    
+    ckpt:
+    
+    n_iters: 3000  
+    batch_size: 1024  
+    step_ratio: 0.5 # Ratio for number of sample per ray
+    alphaMask_thres: 0.001
+
+    resolution:
+        occ_grid_reso: 0
+        data_dim_color: 27
+        density_shift: -10.0
+        distance_scale: 25.0
+        N_voxel_init: 2097156 # 128**3 2097156
+        N_voxel_final: 27000000 # [TensorVMSplit: 27000000 (300**3), TensorCP: 125000000 (500**3)]
+        upsamp_list: [2000,3000,4000,5500,7000]
+        update_AlphaMask_list: [2000,4000]
+        
+    val:
+        #------ Valuation ------
+        N_vis: 5
+        vis_every: 2000
+        train_vis_every: 2000
+        save_ckpt_every: [15000, 30000, 50000]
+
+    decomposition:
+        #------ Decomposition ------
+        n_lamb_sigma: [16, 16, 16] # [TensorVMSplit: [.., .., ..], TensorCP: [..]]
+        n_lamb_sh: [48, 48, 48] # [TensorVMSplit: [.., .., ..], TensorCP: [..]]
+
+    feature:
+        #------ Feature config ------
+        pos_pe: 2
+        view_pe: 2
+        fea_pe: 2
+        data_dim_color: 27
+        featureC: 128
+
+    regularization:
+        free_mark:
+            #------ Frequence reg ------
+            free_reg: true 
+            freq_reg_ratio: 0.8
+            mask_ratio_list: [1]
+
+        occlusion:
+            #------ Occlusion reg ------
+            occ_reg_loss_mult: 0.1
+            occ_reg_range: 20
+            occ_wb_range: 20
+            occ_wb_prior: False
+
+        l1:
+            #------ Reg ------
+            L1_weight_inital: 8e-5 # [TensorVMSplit: 8e-5, TensorCP: 1e-5]
+            L1_weight_rest: 4e-5 # [TensorVMSplit: 4e-5, TensorCP: 1e-5]
+
+        ortho:
+            Ortho_weight: 0.01
+        
+        tv:
+            TV_weight_density: 0.01
+            TV_weight_app: 0.01 
+        
+        mask:
+            rm_weight_mask_thre: 1e-4
+            alpha_mask_thre: 0.0001
+
+    rendering:
+        ndc_ray: 0

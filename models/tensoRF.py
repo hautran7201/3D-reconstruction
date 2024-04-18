@@ -1,9 +1,11 @@
-from .tensorBase import *
+from .tensorBase import TensorBase
 import torch
+from torch.nn import functional as F 
+
 
 class TensorVM(TensorBase):
-    def __init__(self, aabb, gridSize, device, **kargs):
-        super(TensorVM, self).__init__(aabb, gridSize, device, **kargs)
+    def __init__(self, args, aabb, gridSize, near_far, device):
+        super(TensorVM, self).__init__(args, aabb, gridSize, near_far, device)
         
 
     def init_svd_volume(self, res, device):
@@ -136,9 +138,9 @@ class TensorVM(TensorBase):
         print(f'upsamping to {res_target}')
 
 
-class TensorVMSplit(TensorBase):
-    def __init__(self, args, aabb, gridSize, device, **kargs):
-        super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, **kargs)
+class TensorVMSplit(TensorBase):  
+    def __init__(self, args, aabb, gridSize, near_far, device):
+        super(TensorVMSplit, self).__init__(args, aabb, gridSize, near_far, device)
 
 
     def init_svd_volume(self, res, device):

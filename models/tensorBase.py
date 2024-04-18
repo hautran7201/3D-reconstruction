@@ -1,13 +1,13 @@
 import time
 
-import nerfacc
+# import nerfacc
 import numpy as np
 import torch
 import torch.nn
 import torch.nn.functional as F
 
 from .sh import eval_sh_bases
-from .mlp import *
+from .mlp import MLPRender_PE, MLPRender_Fea, MLPRender
 
 
 def positional_encoding(positions, freqs):
@@ -49,49 +49,49 @@ class AlphaGridMask(torch.nn.Module):
 
 
 class TensorBase(torch.nn.Module):
-    def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 27,
-                    shadingMode = 'MLP_PE', alphaMask = None, occGrid = None, near_far=[2.0,6.0],
-                    density_shift = -10, alphaMask_thres=0.001, distance_scale=25, rayMarch_weight_thres=0.0001,
-                    pos_pe = 6, view_pe = 6, fea_pe = 6, featureC=128, step_ratio=2.0,
-                    fea2denseAct = 'softplus'):
+    def __init__(self, args, aabb, gridSize, near_far=[2.0,6.0], device='cpu', alphaMask = None, rayMarch_weight_thres=0.0001):
         super(TensorBase, self).__init__()
 
-        self.density_n_comp = density_n_comp
-        self.app_n_comp = appearance_n_comp
-        self.app_dim = app_dim
         self.aabb = aabb
-        self.alphaMask = alphaMask
-        self.occGrid = occGrid
-        self.device=device
-
-        self.density_shift = density_shift
-        self.alphaMask_thres = alphaMask_thres
-        self.distance_scale = distance_scale
-        self.rayMarch_weight_thres = rayMarch_weight_thres
-        self.fea2denseAct = fea2denseAct
-
+        self.device = device
         self.near_far = near_far
-        self.step_ratio = step_ratio
-
-
-        self.update_stepSize(gridSize)
+        self.alphaMask = alphaMask   
+        self.rayMarch_weight_thres = rayMarch_weight_thres     
 
         self.matMode = [[0,1], [0,2], [1,2]]
         self.vecMode =  [2, 1, 0]
         self.comp_w = [1,1,1]
 
+        # ====== Init from args ======
+        self.step_ratio = args.step_ratio
+        self.fea2denseAct = args.fea2denseAct
 
+        self.density_n_comp = args.decomposition.n_lamb_sigma
+        self.app_n_comp = args.decomposition.n_lamb_sh
+
+        self.app_dim = args.resolution.data_dim_color
+        self.density_shift = args.resolution.density_shift
+        self.distance_scale = args.resolution.distance_scale
+        
+        self.alphaMask_thres = args.alphaMask_thres
+
+        # Feature dim 
+        self.shadingMode = args.shadingMode
+        self.pos_pe = args.feature.pos_pe
+        self.view_pe = args.feature.view_pe
+        self.fea_pe = args.feature.fea_pe
+        self.featureC = args.feature.featureC
+
+        # self.density_bit_length = density_n_comp
+        # self.app_bit_length = appearance_n_comp
+
+        self.pos_bit_length = [2*args.feature.pos_pe*3]
+        self.view_bit_length = [2*args.feature.view_pe*3]
+        self.fea_bit_length = [2*args.feature.fea_pe*self.app_dim]
+
+        self.init_render_func(self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC, device)
+        self.update_stepSize(gridSize)
         self.init_svd_volume(gridSize[0], device)
-
-        self.pos_bit_length = [2*pos_pe*3]
-        self.view_bit_length = [2*view_pe*3]
-        self.fea_bit_length = [2*fea_pe*app_dim]
-
-        self.density_bit_length = density_n_comp
-        self.app_bit_length = appearance_n_comp
-
-        self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = shadingMode, pos_pe, view_pe, fea_pe, featureC
-        self.init_render_func(shadingMode, pos_pe, view_pe, fea_pe, featureC, device)
 
     def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device):
         if shadingMode == 'MLP_PE':
@@ -115,7 +115,7 @@ class TensorBase(torch.nn.Module):
 
     def update_stepSize(self, gridSize):
         print("aabb", self.aabb.view(-1))
-        print("grid size", gridSize)
+        print("grid size", gridSize)        
         self.aabbSize = self.aabb[1] - self.aabb[0]
         self.invaabbSize = 2.0/self.aabbSize
         self.gridSize= torch.LongTensor(gridSize).to(self.device)
@@ -148,7 +148,6 @@ class TensorBase(torch.nn.Module):
         return {
             'aabb': self.aabb,
             'gridSize':self.gridSize.tolist(),
-            'occGrid':self.occGrid,
             'density_n_comp': self.density_n_comp,
             'appearance_n_comp': self.app_n_comp,
             'app_dim': self.app_dim,

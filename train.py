@@ -6,18 +6,39 @@ import sys
 import time
 import torch
 import numpy as np
+import hydra
+import shutil
+from omegaconf import DictConfig
 
-import nerfacc
+# import nerfacc
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
+from opt import config_parser
+
+from models.tensoRF import TensorVMSplit, TensorCP
 
 from dataLoader import dataset_dict
-from opt import config_parser
-from renderer import *
-from utils import *
+
+from renderer import (
+    OctreeRender_trilinear_fast,
+    evaluation, 
+    create_gif,
+    evaluation_path,
+    save_rendered_image_per_train
+)
+from loss import (
+    TVLoss, 
+    PSNRs_calculate
+)
+from utils import (
+    convert_sdf_samples_to_ply, 
+    N_to_reso,
+    cal_n_samples,
+    get_free_mask,
+)
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 renderer = OctreeRender_trilinear_fast
 
 
@@ -144,74 +165,55 @@ def render_test(args):
             device=device,
         )
 
+@hydra.main(version_base=None)
+def reconstruction(config: DictConfig):
 
-def reconstruction(args):
-    # init dataset
-    dataset = dataset_dict[args.dataset_name]
-    if len(args.train_idxs) == 0:
-        train_dataset = dataset(
-          args.datadir, 
-          split='train', 
-          downsample=args.downsample_train, 
-          is_stack=False, 
-          N_imgs=args.N_train_imgs
-        )
+    # Config
+    log_cf = config.log
+    data_cf = config.dataset
+    model_cf = config.model
+
+    dataset = dataset_dict[data_cf.dataset_name]
+    if len(config.dataset.train_idxs) == 0:
+        train_dataset = dataset(data_cf.datadir, split='train', downsample=data_cf.downsample_train, is_stack=False, N_imgs=data_cf.N_train_imgs)
     else:
-        train_dataset = dataset(
-          args.datadir, 
-          split='train', 
-          downsample=args.downsample_train, 
-          is_stack=False, 
-          indexs=args.train_idxs
-        )
+        train_dataset = dataset(data_cf.datadir, split='train', downsample=data_cf.downsample_train, is_stack=False, indexs=data_cf.train_idxs)
 
-    if len(args.val_idxs) == 0:
+    if len(config.dataset.val_idxs) == 0:
         test_dataset = dataset(
-          args.datadir, 
+          data_cf.datadir, 
           split='test', 
-          downsample=args.downsample_train, 
+          downsample=data_cf.downsample_train, 
           is_stack=True, 
-          N_imgs=args.N_test_imgs
+          N_imgs=data_cf.N_test_imgs
         )
     else:
         test_dataset = dataset(
-          args.datadir, 
+          data_cf.datadir, 
           split='test', 
-          downsample=args.downsample_train, 
+          downsample=data_cf.downsample_train, 
           is_stack=True, 
-          indexs=args.val_idxs
+          indexs=data_cf.val_idxs
         )
 
-    if len(args.test_idxs) == 0:
-        final_test_dataset = dataset(
-          args.datadir, 
-          split='test', 
-          downsample=args.downsample_train, 
-          is_stack=True, 
-          N_imgs=args.N_test_imgs
-        )
+    if len(data_cf.test_idxs) == 0:
+        final_test_dataset = dataset(data_cf.datadir,  split='test', downsample=data_cf.downsample_train, is_stack=True, N_imgs=data_cf.N_test_imgs)
     else:
-        final_test_dataset = dataset(
-          args.datadir, 
-          split='test', 
-          downsample=args.downsample_train, 
-          is_stack=True, 
-          indexs=args.test_idxs
-        )
+        final_test_dataset = dataset(data_cf.datadir, split='test', downsample=data_cf.downsample_train, is_stack=True, indexs=data_cf.test_idxs)
 
     # Observation
     train_visual = dataset(
-      args.datadir, 
+      data_cf.datadir, 
       split='train', 
-      downsample=args.downsample_train, 
+      downsample=data_cf.downsample_train, 
       is_stack=True, 
       tqdm=False, 
       indexs=[26]
     )
     test_visual = dataset(
-      args.datadir, 
+      data_cf.datadir, 
       split='test', 
-      downsample=args.downsample_train, 
+      downsample=data_cf.downsample_train, 
       is_stack=True, 
       tqdm=False, 
       indexs=[26]
@@ -219,23 +221,16 @@ def reconstruction(args):
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
-    ndc_ray = args.ndc_ray
+    ndc_ray = config.model.rendering.ndc_ray
 
-    # init resolution
-    upsamp_list = args.upsamp_list
-    update_AlphaMask_list = args.update_AlphaMask_list
-    n_lamb_sigma = args.n_lamb_sigma
-    n_lamb_sh = args.n_lamb_sh
-    mask_ratio_list = args.mask_ratio_list
+    mask_ratio_list = model_cf.regularization.free_mark    
 
-    if args.add_timestamp:
-        logfolder = f'{args.basedir}/{args.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
+    if log_cf.add_timestamp:
+        logfolder = f'{log_cf.basedir}/{log_cf.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
     else:
-        logfolder = f"{args.basedir}/{args.expname}"
+        logfolder = f"{log_cf.basedir}/{log_cf.expname}"
 
-    if args.overwrt and os.path.exists(logfolder):
-      import shutil
-      shutil.rmtree(logfolder)
+    if log_cf.overwrt and os.path.exists(logfolder): shutil.rmtree(logfolder)
 
 
     # init log file
@@ -248,43 +243,31 @@ def reconstruction(args):
     # init parameters
     # tensorVM, renderer = init_parameters(args, train_dataset.scene_bbox.to(device), reso_list[0])
     aabb = train_dataset.scene_bbox.to(device)
-    reso_cur = N_to_reso(args.N_voxel_init, aabb)
-    nSamples = min(args.nSamples, cal_n_samples(reso_cur, args.step_ratio))
+    gridSize = N_to_reso(model_cf.resolution.N_voxel_init, aabb)
+    nSamples = min(1e6, cal_n_samples(gridSize, model_cf.step_ratio))
 
-    occ_grid = None
+    """occ_grid = None
     if args.occ_grid_reso > 0:
         occ_grid = nerfacc.OccGridEstimator(
             roi_aabb=aabb.reshape(-1), resolution=args.occ_grid_reso
-        ).to(device)
+        ).to(device)"""
 
-    if args.ckpt is not None:
-        ckpt = torch.load(args.ckpt, map_location=device)
+    if model_cf.ckpt is not None:
+        ckpt = torch.load(model_cf.ckpt, map_location=device)
         kwargs = ckpt["kwargs"]
         kwargs.update({"device": device})
-        tensorf = eval(args.model_name)(**kwargs, occGrid=occ_grid)
+        tensorf = eval(model_cf.model_name)(**kwargs)
         tensorf.load(ckpt)
     else:
-        tensorf = eval(args.model_name)(
-            args,
-            aabb,
-            reso_cur,
-            device,
-            density_n_comp=n_lamb_sigma,
-            appearance_n_comp=n_lamb_sh,
-            app_dim=args.data_dim_color,
-            near_far=near_far,
-            shadingMode=args.shadingMode,
-            occGrid=occ_grid,
-            alphaMask_thres=args.alpha_mask_thre,
-            density_shift=args.density_shift,
-            distance_scale=args.distance_scale,
-            pos_pe=args.pos_pe,
-            view_pe=args.view_pe,
-            fea_pe=args.fea_pe,
-            featureC=args.featureC,
-            step_ratio=args.step_ratio,
-            fea2denseAct=args.fea2denseAct,
+        tensorf = eval(model_cf.model_name)(
+            args=model_cf,
+            aabb=aabb,
+            gridSize=gridSize,
+            device=device,
+            near_far=near_far
         )
+
+    return 
 
     # Don't update aabb and invaabbSize for occ.
     def occ_normalize_coord(xyz_sampled):
@@ -510,6 +493,7 @@ def reconstruction(args):
 
             PSNRs_train = []
 
+        update_AlphaMask_list = model_cf.resolution.update_AlphaMask_list
         if iteration in update_AlphaMask_list:
             if (
                 reso_cur[0] * reso_cur[1] * reso_cur[2] < 256**3
@@ -637,7 +621,9 @@ if __name__ == '__main__':
     torch.manual_seed(20211202)
     np.random.seed(20211202)
 
-    args = config_parser()
+    ckpt_path = reconstruction()
+
+    """args = config_parser()
 
     if args.export_mesh:
         export_mesh(args, args.ckpt)
@@ -649,4 +635,4 @@ if __name__ == '__main__':
         export_mesh(args, ckpt_path)  
 
         import shutil 
-        shutil.copy(args.config, ckpt_path[:-3]+'.txt')
+        shutil.copy"""
