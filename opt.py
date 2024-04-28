@@ -65,7 +65,7 @@ def config_parser(cmd=None):
     parser.add_argument("--mask_ratio_list", type=float, action="append", default=[1])
     parser.add_argument("--max_vis_freq_ratio", type=float, default=0.0,
                         help='encoding reg')                        
-    # Occ
+    # Occ 
     parser.add_argument("--occ_reg", action='store_true',
                         help='using occlusion reg')
     parser.add_argument("--occ_reg_loss_mult", type=float, default=0.0,

@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 import scipy.signal
+import sys
 
 from tqdm import tqdm
-
 from utils import visualize_depth_numpy
 
 @torch.no_grad()
-def PSNRs_calculate(args, tensorf, dataset, renderer, chunk=4096, N_samples=-1,
+def PSNRs_calculate(tensorf, dataset, renderer, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=False, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]

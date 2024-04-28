@@ -1,4 +1,3 @@
-import datetime
 import json
 import os
 import random
@@ -8,17 +7,17 @@ import torch
 import numpy as np
 import hydra
 import shutil
-from omegaconf import DictConfig
+import pytz
+from datetime import datetime
+from omegaconf import DictConfig, OmegaConf
+from collections import defaultdict
 
-# import nerfacc
+
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
 from opt import config_parser
-
 from models.tensoRF import TensorVMSplit, TensorCP
-
 from dataLoader import dataset_dict
-
 from renderer import (
     OctreeRender_trilinear_fast,
     evaluation, 
@@ -165,223 +164,163 @@ def render_test(args):
             device=device,
         )
 
+
 @hydra.main(version_base=None)
-def reconstruction(config: DictConfig):
-
-    # Config
-    log_cf = config.log
-    data_cf = config.dataset
-    model_cf = config.model
-
-    dataset = dataset_dict[data_cf.dataset_name]
-    if len(config.dataset.train_idxs) == 0:
-        train_dataset = dataset(data_cf.datadir, split='train', downsample=data_cf.downsample_train, is_stack=False, N_imgs=data_cf.N_train_imgs)
-    else:
-        train_dataset = dataset(data_cf.datadir, split='train', downsample=data_cf.downsample_train, is_stack=False, indexs=data_cf.train_idxs)
-
-    if len(config.dataset.val_idxs) == 0:
-        test_dataset = dataset(
-          data_cf.datadir, 
-          split='test', 
-          downsample=data_cf.downsample_train, 
-          is_stack=True, 
-          N_imgs=data_cf.N_test_imgs
-        )
-    else:
-        test_dataset = dataset(
-          data_cf.datadir, 
-          split='test', 
-          downsample=data_cf.downsample_train, 
-          is_stack=True, 
-          indexs=data_cf.val_idxs
-        )
-
-    if len(data_cf.test_idxs) == 0:
-        final_test_dataset = dataset(data_cf.datadir,  split='test', downsample=data_cf.downsample_train, is_stack=True, N_imgs=data_cf.N_test_imgs)
-    else:
-        final_test_dataset = dataset(data_cf.datadir, split='test', downsample=data_cf.downsample_train, is_stack=True, indexs=data_cf.test_idxs)
-
-    # Observation
-    train_visual = dataset(
-      data_cf.datadir, 
-      split='train', 
-      downsample=data_cf.downsample_train, 
-      is_stack=True, 
-      tqdm=False, 
-      indexs=[26]
-    )
-    test_visual = dataset(
-      data_cf.datadir, 
-      split='test', 
-      downsample=data_cf.downsample_train, 
-      is_stack=True, 
-      tqdm=False, 
-      indexs=[26]
-    )
-
+def reconstruction(args: DictConfig):
+    # ==> Dataset
+    # ================================
+    dataset             = dataset_dict[args.dataset_name]
+    train_dataset       = dataset(args.datadir, split='train', downsample=args.downsample_train, num_images=OmegaConf.to_object(args.train_images))
+    test_dataset        = dataset(args.datadir, split='test', downsample=args.downsample_train, num_images=OmegaConf.to_object(args.test_images), is_stack=True)
+    # final_test_dataset  = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, num_images=args.N_train_imgs)    
+    train_gift_data     = dataset(args.datadir, split='train', downsample=args.downsample_train, num_images=[26], is_stack=True)
+    test_gift_data      = dataset(args.datadir, split='test', downsample=args.downsample_train, num_images=[26], is_stack=True)
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
-    ndc_ray = config.model.rendering.ndc_ray
-
-    mask_ratio_list = model_cf.regularization.free_mark    
-
-    if log_cf.add_timestamp:
-        logfolder = f'{log_cf.basedir}/{log_cf.expname}{datetime.datetime.now().strftime("-%Y%m%d-%H%M%S")}'
-    else:
-        logfolder = f"{log_cf.basedir}/{log_cf.expname}"
-
-    if log_cf.overwrt and os.path.exists(logfolder): shutil.rmtree(logfolder)
+    ndc_ray = args.ndc_ray
 
 
-    # init log file
+    # ==> Init resolution
+    # ================================
+    upsamp_list = args.upsamp_list
+    update_AlphaMask_list = args.update_AlphaMask_list
+    n_lamb_sigma = args.n_lamb_sigma
+    n_lamb_sh = args.n_lamb_sh
+
+    
+    # ==> Init log folder
+    # ================================
+    timezone = pytz.timezone('Asia/Ho_Chi_Minh')
+    current_time = datetime.now(timezone)
+    logfolder = f'{args.basedir}/{current_time.strftime("%Y-%m-%d")}/{args.expname}'
+    if args.overwrt and os.path.exists(logfolder): shutil.rmtree(logfolder)    
     os.makedirs(logfolder, exist_ok=True)
     os.makedirs(f"{logfolder}/imgs_vis", exist_ok=True)
     os.makedirs(f"{logfolder}/imgs_rgba", exist_ok=True)
     os.makedirs(f"{logfolder}/rgba", exist_ok=True)
     summary_writer = SummaryWriter(logfolder)
 
-    # init parameters
-    # tensorVM, renderer = init_parameters(args, train_dataset.scene_bbox.to(device), reso_list[0])
+
+    # ==> Init parameters
+    # ================================
     aabb = train_dataset.scene_bbox.to(device)
-    gridSize = N_to_reso(model_cf.resolution.N_voxel_init, aabb)
-    nSamples = min(1e6, cal_n_samples(gridSize, model_cf.step_ratio))
-
-    """occ_grid = None
-    if args.occ_grid_reso > 0:
-        occ_grid = nerfacc.OccGridEstimator(
-            roi_aabb=aabb.reshape(-1), resolution=args.occ_grid_reso
-        ).to(device)"""
-
-    if model_cf.ckpt is not None:
-        ckpt = torch.load(model_cf.ckpt, map_location=device)
-        kwargs = ckpt["kwargs"]
-        kwargs.update({"device": device})
-        tensorf = eval(model_cf.model_name)(**kwargs)
-        tensorf.load(ckpt)
-    else:
-        tensorf = eval(model_cf.model_name)(
-            args=model_cf,
-            aabb=aabb,
-            gridSize=gridSize,
-            device=device,
-            near_far=near_far
-        )
-
-    return 
-
-    # Don't update aabb and invaabbSize for occ.
-    def occ_normalize_coord(xyz_sampled):
-        return (xyz_sampled - tensorf.aabb[0]) * tensorf.invaabbSize - 1
-
-    grad_vars = tensorf.get_optparam_groups(args.lr_init, args.lr_basis)
-    if args.lr_decay_iters > 0:
-        lr_factor = args.lr_decay_target_ratio ** (1 / args.lr_decay_iters)
-    else:
-        args.lr_decay_iters = args.n_iters
-        lr_factor = args.lr_decay_target_ratio ** (1 / args.n_iters)
-
-    print("lr decay", args.lr_decay_target_ratio, args.lr_decay_iters)
-
-    optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
-
-    # linear in logrithmic space
+    gridSize = N_to_reso(args.N_voxel_init, aabb)
+    nSamples = min(1e6, cal_n_samples(gridSize, args.step_ratio))
     N_voxel_list = (
         torch.round(
             torch.exp(
-                torch.linspace(
-                    np.log(args.N_voxel_init),
-                    np.log(args.N_voxel_final),
-                    len(upsamp_list) + 1,
-                )
+                torch.linspace(np.log(args.N_voxel_init), np.log(args.N_voxel_final), len(upsamp_list) + 1)
             )
         ).long()
     ).tolist()[1:]
 
-    torch.cuda.empty_cache()
-    PSNRs, PSNRs_train, PSNRs_test = [],[0],[0]
 
-    allrays, allrgbs = train_dataset.all_rays, train_dataset.all_rgbs
-    if not args.ndc_ray:
-        allrays, allrgbs = tensorf.filtering_rays(
-            allrays, allrgbs, bbox_only=True
+    # ==> Load checkpoint
+    # ================================
+    if args.ckpt_path is not None:
+        ckpt = torch.load(args.ckpt_path, map_location=device)
+        kwargs = ckpt["kwargs"]
+        kwargs.update({"device": device})
+        tensorf = eval(args.model_name)(**kwargs)
+        tensorf.load(ckpt)
+    else:
+        tensorf = eval(args.model_name)(
+            args={
+                'step_ratio': args.step_ratio,
+                'fea2denseAct': args.fea2denseAct,
+                'density_n_comp': args.n_lamb_sigma,
+                'app_n_comp': args.n_lamb_sh,
+                'app_dim': args.data_dim_color,
+                'density_shift': args.density_shift,
+                'distance_scale': args.distance_scale,
+                'alphaMask_thres': args.alphaMask_thres,
+                'shadingMode': args.shadingMode,
+                'pos_pe': args.pos_pe,
+                'view_pe': args.view_pe,
+                'fea_pe': args.fea_pe,
+                'featureC': args.featureC
+            },
+            aabb=aabb,
+            gridSize=gridSize,
+            device=device,
+            near_far=train_dataset.near_far
         )
-    trainingSampler = SimpleSampler(allrays.shape[0], args.batch_size)
 
+    torch.cuda.empty_cache()
+    print(f"initial TV_weight density: {args.TV_weight_density} appearance: {args.TV_weight_app}")
+
+
+    # ==> Loss init 
+    # ================================
     Ortho_reg_weight = args.Ortho_weight
     print("initial Ortho_reg_weight", Ortho_reg_weight)
-
     L1_reg_weight = args.L1_weight_inital
     print("initial L1_reg_weight", L1_reg_weight)
-    TV_weight_density, TV_weight_app = (
-        args.TV_weight_density,
-        args.TV_weight_app,
-    )
+    TV_weight_density, TV_weight_app = args.TV_weight_density, args.TV_weight_app
     tvreg = TVLoss()
-    print(
-        f"initial TV_weight density: {TV_weight_density} appearance: {TV_weight_app}"
-    )
 
-    from collections import defaultdict
+
+    # ==> Optimzier and Learning rate
+    # ================================
+    if args.lr_decay_iters > 0:
+        lr_factor = args.lr_decay_target_ratio ** (1 / args.lr_decay_iters)
+    else:
+        lr_decay_iters = args.n_iters
+        lr_factor = args.lr_decay_target_ratio ** (1 / args.n_iters)
+    print("lr decay", args.lr_decay_target_ratio, lr_decay_iters)
+
+    grad_vars = tensorf.get_optparam_groups(args.lr_init, args.lr_basis)
+    optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
+
+
+    # ==> Training Utils
+    # ================================
+    PSNRs, PSNRs_train, PSNRs_test = [],[0],[0]
     history = defaultdict(list)
-
+    run_tic = time.time()
     pbar = tqdm(
         range(args.n_iters),
         miniters=args.progress_refresh_rate,
         file=sys.stdout,
     )
-    run_tic = time.time()
+
+
+    # ==> Data preparation
+    # ================================
+    allrays, allrgbs = train_dataset.all_rays, train_dataset.all_rgbs
+    if not ndc_ray: allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs, bbox_only=True)
+    trainingSampler = SimpleSampler(allrays.shape[0], args.batch_size)
+    
+
+    # Start training
     for iteration in pbar:
         ray_idx = trainingSampler.nextids()
         rays_train, rgb_train = allrays[ray_idx], allrgbs[ray_idx].to(device)
 
 
-        ratio = mask_ratio_list[0]
+        # ==> Get mask
+        # ================================
+        ratio = args.mask_ratio_list[0]
         if args.free_reg:
             free_maskes = get_free_mask(
-              pos_bl              = tensorf.pos_bit_length, 
-              view_bl             = tensorf.view_bit_length, 
-              fea_bl              = tensorf.fea_bit_length, 
-              den_bl              = tensorf.density_bit_length,
-              app_bl              = tensorf.app_bit_length,
-              using_decomp_mask   = args.free_decomp,
-              step                = iteration, 
-              total_step          = args.n_iters, 
-              ratio               = ratio,
-              device              = device
+                pos_bl              = tensorf.pos_bit_length, 
+                view_bl             = tensorf.view_bit_length, 
+                fea_bl              = tensorf.fea_bit_length, 
+                den_bl              = tensorf.density_n_comp,
+                app_bl              = tensorf.app_n_comp,
+                using_decomp_mask   = args.free_decomp,
+                total_step          = args.n_iters, 
+                step                = iteration, 
+                ratio               = ratio,
+                device              = device
             )
         else:
             free_maskes = get_free_mask()
 
-        if tensorf.occGrid is not None:
 
-            def occ_eval_fn(x):
-                step_size = tensorf.stepSize
-
-                # compute occupancy
-                density = (
-                    tensorf.feature2density(
-                        tensorf.compute_densityfeature(
-                            occ_normalize_coord(x), 
-                            free_maskes['decomp']['den']
-                        )[:, None]
-                    )
-                    * tensorf.distance_scale
-                )
-                return density * step_size
-
-            tensorf.occGrid.update_every_n_steps(
-                step=iteration, occ_eval_fn=occ_eval_fn
-            )
-
-        # rgb_map, alphas_map, depth_map, weights, uncertainty
-        (
-            rgb_map,
-            alphas_map,
-            depth_map,
-            weights,
-            uncertainty,
-            num_samples,
-        ) = renderer(
+        # ==> Render from grid
+        # ================================
+        (rgb_map, alphas_map, depth_map, weights, uncertainty, num_samples) = renderer(
             rays_train,
             tensorf,
             free_maskes,
@@ -393,10 +332,11 @@ def reconstruction(config: DictConfig):
             is_train=True,
         )
 
-        loss = torch.mean((rgb_map - rgb_train) ** 2)
 
-        # loss
-        total_loss = loss
+        # ==> Loss
+        # ================================
+        total_loss = loss = torch.mean((rgb_map - rgb_train) ** 2)
+
         if Ortho_reg_weight > 0 and 'VM' in args.model_name:
             loss_reg = tensorf.vector_comp_diffs()
             total_loss += Ortho_reg_weight * loss_reg
@@ -411,7 +351,6 @@ def reconstruction(config: DictConfig):
                 loss_reg_L1.detach().item(),
                 global_step=iteration,
             )
-
         if TV_weight_density > 0:
             TV_weight_density *= lr_factor
             loss_tv = tensorf.TV_loss_density(tvreg) * TV_weight_density
@@ -431,22 +370,30 @@ def reconstruction(config: DictConfig):
                 global_step=iteration,
             )
 
+
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-        loss = loss.detach().item()
 
+        loss = loss.detach().item()
         PSNRs.append(-10.0 * np.log(loss) / np.log(10.0))
         summary_writer.add_scalar(
             "train/PSNR", PSNRs[-1], global_step=iteration
         )
-        summary_writer.add_scalar("train/mse", loss, global_step=iteration)
+        summary_writer.add_scalar(
+            "train/mse", loss, global_step=iteration
+        )
 
+
+        # ==> Update learning rate
+        # ================================
         for param_group in optimizer.param_groups:
             param_group["lr"] = param_group["lr"] * lr_factor
 
-        # Print the current values of the losses.
+
+        # ==> Print loss
+        # ================================
         if iteration % args.progress_refresh_rate == 0:
             step_toc = time.time()
             pbar.set_description(
@@ -458,105 +405,97 @@ def reconstruction(config: DictConfig):
             )
             PSNRs = []
 
+
+        # ==> PSNRs metric
+        # ================================
         if iteration % args.train_vis_every == 0:
             if iteration % args.vis_every == 0:
                 PSNRs_test = PSNRs_calculate(
-                  args,
-                  tensorf,
-                  test_dataset,
-                  renderer, 
-                  chunk=args.batch_size,
-                  N_samples=nSamples,
-                  white_bg=white_bg, 
-                  ndc_ray=ndc_ray,                   
-                  device=device)
+                    tensorf,
+                    test_dataset,
+                    renderer, 
+                    chunk=args.batch_size,
+                    N_samples=nSamples,
+                    white_bg=white_bg, 
+                    ndc_ray=ndc_ray,                   
+                    device=device
+                )
             history['iteration'].append(iteration)
             history['train_psnr'].append(round(float(np.mean(PSNRs_train)), 2))
             history['test_psnr'].append(round(float(np.mean(PSNRs_test)), 2))
             history['mse'].append(round(loss, 5))
-            # history['pc_valib_rgb'].append(round(number_valib_rgb[0]/number_valib_rgb[1], 2))        
 
+
+            # ==> Save rendered image
+            # ================================
             save_rendered_image_per_train(
-              train_dataset       = train_visual,
-              test_dataset        = test_visual,
-              tensorf             = tensorf, 
-              renderer            = renderer,
-              step                = iteration,
-              logs                = history,
-              savePath            = f'{logfolder}/gif/',
-              chunk               = args.batch_size,
-              N_samples           = nSamples, 
-              white_bg            = white_bg, 
-              ndc_ray             = ndc_ray,
-              device              = device
-              )
-
+                train_dataset       = train_gift_data,
+                test_dataset        = test_gift_data,
+                tensorf             = tensorf, 
+                renderer            = renderer,
+                step                = iteration,
+                logs                = history,
+                savePath            = f'{logfolder}/gif/',
+                chunk               = args.batch_size,
+                N_samples           = nSamples, 
+                white_bg            = white_bg, 
+                ndc_ray             = ndc_ray,
+                device              = device
+            )
             PSNRs_train = []
 
-        update_AlphaMask_list = model_cf.resolution.update_AlphaMask_list
+        return 
+        # ==> Update alphaMask list
+        # ================================
         if iteration in update_AlphaMask_list:
-            if (
-                reso_cur[0] * reso_cur[1] * reso_cur[2] < 256**3
-            ):  # update volume resolution
+            if (reso_cur[0] * reso_cur[1] * reso_cur[2]) < 256**3:
                 reso_mask = reso_cur
+
             new_aabb = tensorf.updateAlphaMask(tuple(reso_mask), free_maskes['decomp']['den'])
             if iteration == update_AlphaMask_list[0]:
                 tensorf.shrink(new_aabb)
-                # tensorVM.alphaMask = None
-                L1_reg_weight = args.L1_weight_rest
-                print("continuing L1_reg_weight", L1_reg_weight)
 
-            if not args.ndc_ray and iteration == update_AlphaMask_list[1]:
-                # filter rays outside the bbox
+            # Filter rays outside the bbox
+            if not ndc_ray and iteration == update_AlphaMask_list[1]:
                 allrays, allrgbs = tensorf.filtering_rays(allrays, allrgbs)
                 trainingSampler = SimpleSampler(
-                    allrgbs.shape[0], args.batch_size
+                    allrgbs.shape[0], batch_size
                 )
 
-        if iteration in upsamp_list:
 
+
+        if iteration in upsamp_list:
             if len(upsamp_list) == len(mask_ratio_list):
                 ratio = mask_ratio_list[upsamp_list.index(iteration)]
 
             n_voxels = N_voxel_list.pop(0)
             reso_cur = N_to_reso(n_voxels, tensorf.aabb)
-            nSamples = min(
-                args.nSamples, cal_n_samples(reso_cur, args.step_ratio)
-            )            
+            nSamples = min(nSamples, cal_n_samples(reso_cur, step_ratio))            
             tensorf.upsample_volume_grid(reso_cur)
 
-            if args.lr_upsample_reset:
-                print("reset lr to initial")
-                lr_scale = 1  # 0.1 ** (iteration / args.n_iters)
-            else:
-                lr_scale = args.lr_decay_target_ratio ** (
-                    iteration / args.n_iters
-                )
-            grad_vars = tensorf.get_optparam_groups(
-                args.lr_init * lr_scale, args.lr_basis * lr_scale
-            )
+            if lr_upsample_reset: lr_scale = 1  # 0.1 ** (iteration / args.n_iters)
+            else:lr_scale = lr_decay_target_ratio ** (iteration / n_iters)
+
+            grad_vars = tensorf.get_optparam_groups(lr_init * lr_scale, lr_basis * lr_scale)
             optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
 
-        if iteration in args.save_ckpt_every:
-            tensorf.save(f'{logfolder}/{iteration//1000}k_{args.expname}.th')        
+        if iteration in save_ckpt_every:
+            tensorf.save(f'{logfolder}/{iteration//1000}k_{expname}.th')        
+
+        return
 
     tensorf.save(f'{logfolder}/final_{args.expname}.th')
     elapsed_time = time.time() - run_tic
-    print(f"Total time {elapsed_time:.2f}s.")
     np.savetxt(f"{logfolder}/training_time.txt", np.asarray([elapsed_time]))
+    print(f"Total time {elapsed_time:.2f}s.")
 
     if args.render_train:
         os.makedirs(f"{logfolder}/imgs_train_all", exist_ok=True)
-        train_dataset = dataset(
-            args.datadir,
-            split="train",
-            downsample=args.downsample_train,
-            is_stack=True,
-        )
+        train_dataset = dataset(args.datadir, split="train", downsample=args.downsample_train, is_stack=True)
+
         PSNRs_test = evaluation(
             train_dataset,
             tensorf,
-            args,
             renderer,
             f"{logfolder}/imgs_train_all/",
             N_vis=-1,
@@ -565,16 +504,13 @@ def reconstruction(config: DictConfig):
             ndc_ray=ndc_ray,
             device=device,
         )
-        print(
-            f"======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================"
-        )
+        print(f"======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================")
 
-    if args.render_test:
+    if render_test:
         os.makedirs(f"{logfolder}/imgs_test_all", exist_ok=True)
         PSNRs_test = evaluation(
             test_dataset,
             tensorf,
-            args,
             renderer,
             f"{logfolder}/imgs_test_all/",
             N_vis=-1,
@@ -583,16 +519,11 @@ def reconstruction(config: DictConfig):
             ndc_ray=ndc_ray,
             device=device,
         )
-        summary_writer.add_scalar(
-            "test/psnr_all", np.mean(PSNRs_test), global_step=iteration
-        )
-        print(
-            f"======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================"
-        )
+        summary_writer.add_scalar("test/psnr_all", np.mean(PSNRs_test), global_step=iteration)
+        print(f"======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================")
 
     if args.render_path:
-        c2ws = test_dataset.render_path
-        # c2ws = test_dataset.poses
+        c2ws = test_dataset.render_path        
         print("========>", c2ws.shape)
         os.makedirs(f"{logfolder}/imgs_path_all", exist_ok=True)
         evaluation_path(
@@ -609,9 +540,7 @@ def reconstruction(config: DictConfig):
         )
 
     np.savez(f"{logfolder}/history.npz", **history)
-
     create_gif(f"{logfolder}/gif/plot/vis_every", f"{logfolder}/gif/training.gif")
-
     return f'{logfolder}/final_{args.expname}.th'
 
 

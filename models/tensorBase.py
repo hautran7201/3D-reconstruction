@@ -57,37 +57,30 @@ class TensorBase(torch.nn.Module):
         self.near_far = near_far
         self.alphaMask = alphaMask   
         self.rayMarch_weight_thres = rayMarch_weight_thres     
-
         self.matMode = [[0,1], [0,2], [1,2]]
         self.vecMode =  [2, 1, 0]
         self.comp_w = [1,1,1]
 
         # ====== Init from args ======
-        self.step_ratio = args.step_ratio
-        self.fea2denseAct = args.fea2denseAct
-
-        self.density_n_comp = args.decomposition.n_lamb_sigma
-        self.app_n_comp = args.decomposition.n_lamb_sh
-
-        self.app_dim = args.resolution.data_dim_color
-        self.density_shift = args.resolution.density_shift
-        self.distance_scale = args.resolution.distance_scale
-        
-        self.alphaMask_thres = args.alphaMask_thres
+        self.step_ratio = args['step_ratio']
+        self.fea2denseAct = args['fea2denseAct']
+        self.density_n_comp = args['density_n_comp']
+        self.app_n_comp = args['app_n_comp']
+        self.app_dim = args['app_dim']
+        self.density_shift = args['density_shift']
+        self.distance_scale = args['distance_scale']
+        self.alphaMask_thres = args['alphaMask_thres']
 
         # Feature dim 
-        self.shadingMode = args.shadingMode
-        self.pos_pe = args.feature.pos_pe
-        self.view_pe = args.feature.view_pe
-        self.fea_pe = args.feature.fea_pe
-        self.featureC = args.feature.featureC
+        self.shadingMode = args['shadingMode']
+        self.pos_pe = args['pos_pe']
+        self.view_pe = args['view_pe']
+        self.fea_pe = args['fea_pe']
+        self.featureC = args['featureC']
 
-        # self.density_bit_length = density_n_comp
-        # self.app_bit_length = appearance_n_comp
-
-        self.pos_bit_length = [2*args.feature.pos_pe*3]
-        self.view_bit_length = [2*args.feature.view_pe*3]
-        self.fea_bit_length = [2*args.feature.fea_pe*self.app_dim]
+        self.pos_bit_length = [2*args['pos_pe']*3]
+        self.view_bit_length = [2*args['view_pe']*3]
+        self.fea_bit_length = [2*args['fea_pe']*self.app_dim]
 
         self.init_render_func(self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC, device)
         self.update_stepSize(gridSize)
@@ -104,18 +97,11 @@ class TensorBase(torch.nn.Module):
             print("Unrecognized shading module")
             exit()
 
-        """elif shadingMode == 'SH':
-            self.renderModule = SHRender
-        elif shadingMode == 'RGB':
-            assert self.app_dim == 3
-            self.renderModule = RGBRender"""
-
+        print("\nModel:")
         print("pos_pe", pos_pe, "view_pe", view_pe, "fea_pe", fea_pe)
         print(self.renderModule)
 
-    def update_stepSize(self, gridSize):
-        print("aabb", self.aabb.view(-1))
-        print("grid size", gridSize)        
+    def update_stepSize(self, gridSize):     
         self.aabbSize = self.aabb[1] - self.aabb[0]
         self.invaabbSize = 2.0/self.aabbSize
         self.gridSize= torch.LongTensor(gridSize).to(self.device)
@@ -123,6 +109,9 @@ class TensorBase(torch.nn.Module):
         self.stepSize=torch.mean(self.units)*self.step_ratio
         self.aabbDiag = torch.sqrt(torch.sum(torch.square(self.aabbSize)))
         self.nSamples=int((self.aabbDiag / self.stepSize).item()) + 1
+        print("\nConfig:")
+        print("aabb", self.aabb.view(-1))
+        print("grid size", gridSize)   
         print("sampling step size: ", self.stepSize)
         print("sampling number: ", self.nSamples)
 
@@ -329,7 +318,7 @@ class TensorBase(torch.nn.Module):
         return alpha
 
 
-    def _forward(self, rays_chunk, mask, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1):
+    def forward(self, rays_chunk, mask, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1):
 
         if mask == None:
             encoding_mask = {
@@ -404,104 +393,3 @@ class TensorBase(torch.nn.Module):
             depth_map,
             num_valid_samples,
         )  # rgb, sigma, alpha, weight, bg_weight
-
-    def _forward_nerfacc(
-        self,
-        rays_chunk,
-        mask,
-        white_bg=True,
-        is_train=False,
-        ndc_ray=False,
-        N_samples=-1,
-    ):
-
-        if mask == None:
-            encoding_mask = {
-                'pos': None,
-                'view': None,
-                'fea': None
-            }
-            den_decomp_mask = None
-            app_decomp_mask = None
-        else:
-            encoding_mask = mask['encoding']
-            den_decomp_mask = mask['decomp']['den']
-            app_decomp_mask = mask['decomp']['app']
-
-        assert not ndc_ray
-        origins = rays_chunk[:, :3]
-        viewdirs = rays_chunk[:, 3:6]
-
-        def sigma_fn(t_starts, t_ends, ray_indices):
-            t_origins = origins[ray_indices]
-            t_dirs = viewdirs[ray_indices]
-            positions = t_origins + t_dirs * (t_starts + t_ends)[..., None] / 2.0
-            if t_origins.shape[0] == 0:
-                return torch.zeros((0,), device=t_origins.device)
-            return (
-                self.feature2density(  # type: ignore
-                    self.compute_densityfeature(
-                        self.normalize_coord(positions),
-                        den_decomp_mask
-                    )
-                )
-                * self.distance_scale
-            )
-
-        def rgb_sigma_fn(t_starts, t_ends, ray_indices):
-            t_origins = origins[ray_indices]
-            t_dirs = viewdirs[ray_indices]
-            if t_origins.shape[0] == 0:
-                return torch.zeros(
-                    (0, 3), device=t_origins.device
-                ), torch.zeros((0,), device=t_origins.device)
-            positions = t_origins + t_dirs * (t_starts + t_ends)[..., None] / 2.0
-            positions = self.normalize_coord(positions)
-            sigmas = (
-                self.feature2density(  # type: ignore
-                    self.compute_densityfeature(positions, den_decomp_mask)
-                )
-                * self.distance_scale
-            )
-            rgbs = self.renderModule(
-                positions, t_dirs, self.compute_appfeature(positions, app_decomp_mask), encoding_mask
-            )
-            return rgbs, sigmas
-
-        ray_indices, t_starts, t_ends = self.occGrid.sampling(
-            origins,
-            viewdirs,
-            sigma_fn=sigma_fn,
-            near_plane=self.near_far[0],
-            far_plane=self.near_far[1],
-            render_step_size=self.stepSize,
-            stratified=is_train,
-        )
-        rgb_map, _, depth_map, _ = nerfacc.rendering(
-            t_starts,
-            t_ends,
-            ray_indices=ray_indices,
-            n_rays=origins.shape[0],
-            rgb_sigma_fn=rgb_sigma_fn,
-            render_bkgd=1 if white_bg else 0,
-        )
-
-        return rgb_map, depth_map, t_starts.shape[0]
-
-    def forward(
-        self,
-        rays_chunk,
-        mask,
-        white_bg=True,
-        is_train=False,
-        ndc_ray=False,
-        N_samples=-1,
-    ):
-        if self.occGrid is not None:
-            return self._forward_nerfacc(
-                rays_chunk, mask, white_bg, is_train, ndc_ray, N_samples
-            )
-        else:
-            return self._forward(
-                rays_chunk, mask, white_bg, is_train, ndc_ray, N_samples
-            )

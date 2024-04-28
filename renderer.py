@@ -146,7 +146,7 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         plt.close()
 
 @torch.no_grad()
-def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
+def evaluation(test_dataset, tensorf, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, gt_rgb_maps, rgb_maps, depth_maps = [], [], [], []
     ssims,l_alex,l_vgg=[],[],[]

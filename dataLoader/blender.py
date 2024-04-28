@@ -1,18 +1,18 @@
 import torch,cv2
-from torch.utils.data import Dataset
 import json
-from tqdm import tqdm
 import os
+import numpy as np
+from tqdm import tqdm
+from torch.utils.data import Dataset
 from PIL import Image, ImageEnhance
 from torchvision import transforms as T
+from typing import Union, List
 
-
-from .ray_utils import *
+from .ray_utils import read_pfm, get_rays, get_ray_directions
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0, indexs=[],
-    enhance=None):
+    def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, num_images:Union[List[int], int]=-1, enhance=None):
 
         self.w = 800 
         self.h = 800
@@ -23,8 +23,7 @@ class BlenderDataset(Dataset):
         self.is_stack = is_stack
         self.img_wh = (int(self.w/downsample),int(self.h/downsample))
         self.tqdm = tqdm
-        self.N_imgs = N_imgs
-        self.indexs = indexs
+        self.num_images = num_images
         self.enhance = enhance
         self.define_transforms()
 
@@ -69,17 +68,12 @@ class BlenderDataset(Dataset):
 
         img_eval_interval = 1 if self.N_vis < 0 else len(self.meta['frames']) // self.N_vis
         idxs = list(range(0, len(self.meta['frames']), img_eval_interval))
-
-        if len(self.indexs) > 0:
-            idxs = self.indexs
-        elif self.N_imgs > 0 and self.N_imgs < len(idxs):
+        if isinstance(self.num_images, int) and self.num_images > 0 and self.num_images < len(idxs):
             idxs = np.random.choice(idxs, self.N_imgs, replace=False)
+        elif isinstance(self.num_images, list):
+            idxs = self.num_images
 
-        if self.tqdm:
-            bars = tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})')
-        else:
-            bars = idxs  
-                  
+        bars = tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})')          
         for i in bars:#img_list:#
             frame = self.meta['frames'][i]
             pose = np.array(frame['transform_matrix']) @ self.blender2opencv
