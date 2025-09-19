@@ -1,3 +1,4 @@
 data
-few_nerf
+few_nerf/log
 **__pycache__**
+test.ipynb

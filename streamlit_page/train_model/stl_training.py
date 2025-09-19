@@ -29,7 +29,10 @@ def training_model(config_dir):
         with open(os.path.join(args.datadir, f"transforms_train.json"), 'r') as f:
             meta = json.load(f)
         
-        train_idxs = args.train_idxs
+        if args.train_idxs:
+            train_idxs = args.train_idxs
+        else:
+            train_idxs = range(0, len(meta['frames'])-1)
 
         image_list = defaultdict(dict)
         for i in train_idxs:#img_list:#
@@ -47,11 +50,17 @@ def training_model(config_dir):
                 camera_angle_x = camera_angle_y
             if camera_angle_y == 0:
                 camera_angle_y = camera_angle_x
+                
             camera_angles = [camera_angle_x, camera_angle_y]
 
-            file_path = frame['file_path'].split('.')[-1]
-            image_path = args.datadir + file_path + '.png'
+            if args.dataset_name == "blender":
+                file_path = frame['file_path'].split('.')[-1]
+                image_path = os.path.join(args.datadir, f"{frame['file_path']}.png")
+            if args.dataset_name == "human":
+                file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
+                image_path = os.path.join(args.datadir, "train",file_path+'.png')
             formatted_path = os.path.join(*image_path.split('/'))
+            
             file_path = formatted_path
 
             file_name = formatted_path.split('\\')[-1]
@@ -67,7 +76,6 @@ def training_model(config_dir):
         col1, col2 = st.columns([0.3, 0.7])
         col1.subheader('List of images:')
         
-
         train_image_choice = col2.selectbox(
             "List of images", 
             image_list.keys(), 
@@ -98,10 +106,9 @@ def training_model(config_dir):
             key = 'train_button'
         )        
 
-        if train_button:
-            stop_button = st.button(
-                'Stop training',
-                key = 'stop_button'
-            )        
+        if train_button:    
             with st.spinner('Wait for it...'):
-                reconstruction(args)                
+                ckpt_path = reconstruction(args)
+
+                import shutil 
+                shutil.copy(args.config, ckpt_path[:-3]+'.txt')    

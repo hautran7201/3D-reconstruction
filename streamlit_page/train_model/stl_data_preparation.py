@@ -441,7 +441,7 @@ f'''
 dataset_name = {dataloader_box}
 datadir = {training_data_dir}
 expname = {exp_name_box}
-basedir = few_nerf\log
+basedir = {os.path.join("few_nerf","log")}
 
 #------ Number images ------
 train_idxs    = {tx_train_selection_box}
@@ -459,7 +459,7 @@ step_ratio = {ratio_step_box}
 
 
 #------ Resolution ------
-occ_grid_reso           = 300
+occ_grid_reso           = 0
 N_voxel_init            = {N_voxel_init_box**3} # 128**3 2097156
 N_voxel_final           = {N_voxel_final_box**3} # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]

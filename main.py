@@ -10,18 +10,22 @@ sys.path.insert(5, './')
 from stl_dataset import dataset_mode
 from streamlit_page.train_model.stl_train import *
 from streamlit_page.test_model.stl_test import *
+from streamlit_page.inference_model.stl_inference import *
 # Side bar
 with st.sidebar:
-    st.markdown('# **3D reconstruction**')
+    st.markdown('# **FEW-TENSORF**')
     option = st.selectbox(
         'Select option',
-        ['Train model', 'Test model'],
+        ['Train model', 'Test model','Inference'],
         key='select_option'
     )
 
+log_folder = os.path.join('few_nerf', 'log')
 
 # Option
 if option == 'Train model':
     train_model()
 elif option == 'Test model':
     test_model()
+elif option == 'Inference':
+    inference(log_folder)

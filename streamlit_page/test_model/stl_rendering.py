@@ -4,6 +4,7 @@ import glob
 from few_nerf.opt import *
 from few_nerf.train import render_test
 
+NUM_OUTPUT = 10
 
 def rendering(log_dir):
     object_option = st.selectbox(
@@ -57,7 +58,11 @@ def rendering(log_dir):
                     '--render_test',
                     '1' if render_test_box else '0',
                     '--render_train',
-                    '1' if render_train_box else '0'
+                    '1' if render_train_box else '0',
+                    '--N_train_imgs',
+                    str(NUM_OUTPUT), 
+                    '--N_test_imgs',
+                    str(NUM_OUTPUT),                     
                 ]
 
                 args = config_parser(cmd_arguments)

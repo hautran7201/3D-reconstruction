@@ -31,15 +31,17 @@ def mesh_extract(log_dir):
         )
 
         if extract_button:
-            export_mesh(args, ckpt_path)
-            pv.global_theme.show_scalar_bar = False
-            plotter = pv.Plotter(window_size=[400,400])
-            
+            # ckpt_path = os.path.join(log_dir, model_option,f'final_{model_option}.th')
             obj_file = ckpt_path[:-3]+'.ply'
+            if os.path.exists(obj_file):
+                pass
+            else:        
+                export_mesh(args, ckpt_path)
 
-            # tex_file = os.path.join(obj_dir, object_option, object_name, 'material0.jpeg')                
-            mesh = pv.read(obj_file)
+            pv.global_theme.show_scalar_bar = False
+            plotter = pv.Plotter(notebook= True, window_size=[400,400])
             
+            mesh = pv.read(obj_file)
             # st.title(os.path.splitext(os.path.basename(file_name))[0])    
 
             ## Add some scalar field associated to the mesh

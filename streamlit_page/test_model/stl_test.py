@@ -12,9 +12,9 @@ from streamlit_page.test_model.stl_comparation import *
 def test_model():
     st.header('Testing model')
 
-    rendering_tab, mesh_extract_tab, comparation_tab = st.tabs(["Rendering", "Mesh extract", "Comparation"])
+    rendering_tab, mesh_extract_tab, comparation_tab = st.tabs(["Rendering", "Mesh extract", "Comparison"])
 
-    log_dir = 'few_nerf\log'
+    log_dir = os.path.join('few_nerf','log')
     with rendering_tab:
         rendering(log_dir)
     
